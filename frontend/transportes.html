@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Gestión de Transportes - MiTransporte IA</title>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+}
+
+body{
+background:#f4f6f9;
+padding:20px;
+}
+
+.header{
+background:#0c63e7;
+color:white;
+padding:20px;
+border-radius:12px;
+margin-bottom:20px;
+}
+
+.formulario{
+background:white;
+padding:20px;
+border-radius:12px;
+box-shadow:0 2px 8px rgba(0,0,0,.1);
+margin-bottom:20px;
+}
+
+.formulario h2{
+margin-bottom:15px;
+color:#0c63e7;
+}
+
+label{
+display:block;
+margin-top:12px;
+margin-bottom:5px;
+font-weight:bold;
+}
+
+input,
+select,
+textarea{
+width:100%;
+padding:10px;
+border:1px solid #ccc;
+border-radius:6px;
+}
+
+button{
+margin-top:20px;
+background:#0c63e7;
+color:white;
+border:none;
+padding:12px 20px;
+border-radius:8px;
+cursor:pointer;
+font-size:16px;
+}
+
+button:hover{
+background:#094eb4;
+}
+
+.tabla{
+background:white;
+padding:20px;
+border-radius:12px;
+box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:#0c63e7;
+color:white;
+padding:12px;
+}
+
+td{
+padding:12px;
+border-bottom:1px solid #ddd;
+}
+
+.estado-pendiente{
+color:orange;
+font-weight:bold;
+}
+
+.volver{
+display:inline-block;
+margin-bottom:15px;
+padding:10px 15px;
+background:#555;
+color:white;
+text-decoration:none;
+border-radius:8px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<a href="/dashboard" class="volver">
+← Volver al Dashboard
+</a>
+
+<div class="header">
+<h1>Gestión de Transportes</h1>
+<p>Registro y control de solicitudes de transporte</p>
+</div>
+
+<div class="formulario">
+
+<h2>Nueva Solicitud</h2>
+
+<form>
+
+<label>Cliente</label>
+<input type="text" placeholder="Nombre del cliente">
+
+<label>Teléfono</label>
+<input type="text" placeholder="+53 XXXXXXXX">
+
+<label>Origen</label>
+<input type="text" placeholder="Lugar de recogida">
+
+<label>Destino</label>
+<input type="text" placeholder="Lugar de entrega">
+
+<label>Tipo de Servicio</label>
+
+<select>
+<option>Transporte de Carga</option>
+<option>Extracción de Contenedor 20</option>
+<option>Extracción de Contenedor 40</option>
+<option>Transporte de Moto</option>
+<option>Transporte de Triciclo</option>
+<option>Traslado de Cliente</option>
+</select>
+
+<label>Importe</label>
+<input type="number" placeholder="Precio acordado">
+
+<label>Observaciones</label>
+<textarea rows="4"></textarea>
+
+<button type="button">
+
+Guardar Solicitud
+
+</button>
+
+</form>
+
+</div>
+
+<div class="tabla">
+
+<h2>Solicitudes Registradas</h2>
+
+<br>
+
+<table>
+
+<thead>
+
+<tr>
+<th>ID</th>
+<th>Cliente</th>
+<th>Origen</th>
+<th>Destino</th>
+<th>Servicio</th>
+<th>Estado</th>
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+<td>1</td>
+<td>Cliente Demo</td>
+<td>La Habana</td>
+<td>Santiago de Cuba</td>
+<td>Carga</td>
+<td class="estado-pendiente">Pendiente</td>
+</tr>
+
+</tbody>
+
+</table>
+
+</div>
+
+</body>
+
+</html>
