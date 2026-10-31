@@ -1,16 +1,117 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MiTransporte IA</title>
+
+<style>
+
+body{
+    font-family: Arial, sans-serif;
+    margin:0;
+    background:#f5f6fa;
+}
+
+.sidebar{
+    position:fixed;
+    width:220px;
+    height:100vh;
+    background:#0c63e7;
+    color:white;
+    padding:20px;
+}
+
+.sidebar h2{
+    margin-top:0;
+}
+
+.sidebar ul{
+    list-style:none;
+    padding:0;
+}
+
+.sidebar li{
+    padding:10px;
+    margin-bottom:10px;
+    background:rgba(255,255,255,0.1);
+    border-radius:6px;
+}
+
+.content{
+    margin-left:260px;
+    padding:20px;
+}
+
+.card{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    display:inline-block;
+    width:200px;
+    margin:10px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.1);
+}
+
+.numero{
+    font-size:30px;
+    font-weight:bold;
+    color:#0c63e7;
+}
+
+</style>
+
 </head>
 
 <body>
 
-<h1>MiTransporte IA</h1>
+<div class="sidebar">
 
-<p>Frontend v2 funcionando.</p>
+<h2>MiTransporte IA</h2>
+
+<ul>
+<li>🏠 Dashboard</li>
+<li>🚚 Transportes</li>
+<li>👥 Clientes</li>
+<li>📦 Contenedores</li>
+<li>💰 Cotizaciones</li>
+<li>💬 Mensajes</li>
+<li>📊 Reportes</li>
+<li>⚙️ Configuración</li>
+</ul>
+
+</div>
+
+<div class="content">
+
+<h1>Panel Principal</h1>
+
+<div class="card">
+<h3>Transportes</h3>
+<div class="numero">1</div>
+</div>
+
+<div class="card">
+<h3>Clientes</h3>
+<div class="numero">2</div>
+</div>
+
+<div class="card">
+<h3>Contenedores</h3>
+<div class="numero">2</div>
+</div>
+
+<div class="card">
+<h3>Cotizaciones</h3>
+<div class="numero">2</div>
+</div>
+
+<div class="card">
+<h3>Mensajes</h3>
+<div class="numero">2</div>
+</div>
+
+</div>
 
 </body>
 </html>
