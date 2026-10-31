@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Cotizaciones | MiTransporte IA</title>
+
+<style>
+
+body{
+font-family:Arial,sans-serif;
+background:#f5f6fa;
+padding:20px;
+}
+
+h1{
+margin-bottom:20px;
+}
+
+.card{
+background:white;
+padding:20px;
+border-radius:10px;
+margin-bottom:20px;
+box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+
+label{
+display:block;
+margin-top:10px;
+margin-bottom:5px;
+}
+
+input,
+select,
+textarea{
+width:100%;
+padding:10px;
+margin-bottom:15px;
+}
+
+button{
+background:#0c63e7;
+color:white;
+border:none;
+padding:10px 20px;
+border-radius:6px;
+cursor:pointer;
+}
+
+button:hover{
+background:#094eb4;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:#0c63e7;
+color:white;
+padding:10px;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+.estado{
+font-weight:bold;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>💰 Gestión de Cotizaciones</h1>
+
+<div class="card">
+
+<h2>Nueva Cotización</h2>
+
+<label>Cliente</label>
+<input type="text" id="cliente">
+
+<label>Teléfono</label>
+<input type="text" id="telefono">
+
+<label>Origen</label>
+<input type="text" id="origen">
+
+<label>Destino</label>
+<input type="text" id="destino">
+
+<label>Servicio</label>
+
+<select id="servicio">
+
+<option>Transporte de Carga</option>
+<option>Contenedor 20</option>
+<option>Contenedor 40</option>
+<option>Moto</option>
+<option>Moto Eléctrica</option>
+<option>Triciclo</option>
+
+</select>
+
+<label>Importe</label>
+<input type="number" id="importe">
+
+<label>Estado</label>
+
+<select id="estado">
+
+<option>Pendiente</option>
+<option>Enviada</option>
+<option>Aprobada</option>
+<option>Rechazada</option>
+
+</select>
+
+<label>Observaciones</label>
+<textarea id="observaciones"></textarea>
+
+<button onclick="guardarCotizacion()">
+Guardar Cotización
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Cotizaciones Registradas</h2>
+
+<table>
+
+<thead>
+
+<tr>
+<th>ID</th>
+<th>Cliente</th>
+<th>Servicio</th>
+<th>Importe</th>
+<th>Estado</th>
+</tr>
+
+</thead>
+
+<tbody id="tablaCotizaciones">
+
+</tbody>
+
+</table>
+
+</div>
+
+<script>
+
+let cotizaciones =
+JSON.parse(localStorage.getItem("cotizaciones")) || [];
+
+function mostrarCotizaciones(){
+
+const tabla =
+document.getElementById("tablaCotizaciones");
+
+tabla.innerHTML = "";
+
+cotizaciones.forEach((c,index)=>{
+
+tabla.innerHTML += `
+<tr>
+<td>${index+1}</td>
+<td>${c.cliente}</td>
+<td>${c.servicio}</td>
+<td>$${c.importe}</td>
+<td>${c.estado}</td>
+</tr>
+`;
+
+});
+
+}
+
+function guardarCotizacion(){
+
+const cliente =
+document.getElementById("cliente").value;
+
+const telefono =
+document.getElementById("telefono").value;
+
+const origen =
+document.getElementById("origen").value;
+
+const destino =
+document.getElementById("destino").value;
+
+const servicio =
+document.getElementById("servicio").value;
+
+const importe =
+document.getElementById("importe").value;
+
+const estado =
+document.getElementById("estado").value;
+
+const observaciones =
+document.getElementById("observaciones").value;
+
+if(cliente===""){
+
+alert("Debe indicar el cliente");
+
+return;
+
+}
+
+cotizaciones.push({
+
+cliente,
+telefono,
+origen,
+destino,
+servicio,
+importe,
+estado,
+observaciones
+
+});
+
+localStorage.setItem(
+"cotizaciones",
+JSON.stringify(cotizaciones)
+);
+
+mostrarCotizaciones();
+
+document.getElementById("cliente").value="";
+document.getElementById("telefono").value="";
+document.getElementById("origen").value="";
+document.getElementById("destino").value="";
+document.getElementById("importe").value="";
+document.getElementById("observaciones").value="";
+
+}
+
+mostrarCotizaciones();
+
+</script>
+
+</body>
+</html>
