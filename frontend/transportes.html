@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestión de Transportes</title>
+
+<style>
+
+body{
+font-family:Arial,sans-serif;
+background:#f5f6fa;
+padding:20px;
+}
+
+.card{
+background:white;
+padding:20px;
+border-radius:10px;
+margin-bottom:20px;
+box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+
+input, select{
+width:100%;
+padding:10px;
+margin-top:5px;
+margin-bottom:15px;
+}
+
+button{
+background:#0c63e7;
+color:white;
+border:none;
+padding:10px 20px;
+border-radius:6px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:#0c63e7;
+color:white;
+padding:10px;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>🚚 Gestión de Transportes</h1>
+
+<div class="card">
+
+<h2>Nueva Solicitud</h2>
+
+<label>Cliente</label>
+<input type="text" id="cliente">
+
+<label>Origen</label>
+<input type="text" id="origen">
+
+<label>Destino</label>
+<input type="text" id="destino">
+
+<label>Tipo de servicio</label>
+
+<select id="tipo">
+<option>Carga General</option>
+<option>Contenedor 20</option>
+<option>Contenedor 40</option>
+<option>Moto</option>
+<option>Triciclo</option>
+</select>
+
+<button onclick="guardarSolicitud()">
+Guardar Solicitud
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Servicios Registrados</h2>
+
+<table>
+
+<thead>
+<tr>
+<th>ID</th>
+<th>Cliente</th>
+<th>Origen</th>
+<th>Destino</th>
+<th>Servicio</th>
+</tr>
+</thead>
+
+<tbody id="tablaServicios">
+
+</tbody>
+
+</table>
+
+</div>
+
+<script>
+
+let servicios =
+JSON.parse(localStorage.getItem("servicios")) || [];
+
+function mostrarServicios(){
+
+const tabla =
+document.getElementById("tablaServicios");
+
+tabla.innerHTML = "";
+
+servicios.forEach((s,index)=>{
+
+tabla.innerHTML += `
+<tr>
+<td>${index+1}</td>
+<td>${s.cliente}</td>
+<td>${s.origen}</td>
+<td>${s.destino}</td>
+<td>${s.tipo}</td>
+</tr>
+`;
+
+});
+
+}
+
+function guardarSolicitud(){
+
+const cliente =
+document.getElementById("cliente").value;
+
+const origen =
+document.getElementById("origen").value;
+
+const destino =
+document.getElementById("destino").value;
+
+const tipo =
+document.getElementById("tipo").value;
+
+if(cliente===""){
+alert("Debe indicar un cliente");
+return;
+}
+
+servicios.push({
+cliente,
+origen,
+destino,
+tipo
+});
+
+localStorage.setItem(
+"servicios",
+JSON.stringify(servicios)
+);
+
+mostrarServicios();
+
+document.getElementById("cliente").value="";
+document.getElementById("origen").value="";
+document.getElementById("destino").value="";
+
+}
+
+mostrarServicios();
+
+</script>
+
+</body>
+</html>
