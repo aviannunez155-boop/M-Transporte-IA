@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Clientes | MiTransporte IA</title>
+
+<style>
+
+body{
+font-family:Arial,sans-serif;
+background:#f5f6fa;
+padding:20px;
+}
+
+h1{
+margin-bottom:20px;
+}
+
+.card{
+background:white;
+padding:20px;
+border-radius:10px;
+margin-bottom:20px;
+box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+
+label{
+display:block;
+margin-top:10px;
+margin-bottom:5px;
+}
+
+input,
+textarea{
+width:100%;
+padding:10px;
+margin-bottom:15px;
+}
+
+button{
+background:#0c63e7;
+color:white;
+border:none;
+padding:10px 20px;
+border-radius:6px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:#0c63e7;
+color:white;
+padding:10px;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>👥 Gestión de Clientes</h1>
+
+<div class="card">
+
+<h2>Nuevo Cliente</h2>
+
+<label>Nombre</label>
+<input type="text" id="nombre">
+
+<label>Teléfono</label>
+<input type="text" id="telefono">
+
+<label>Correo</label>
+<input type="email" id="correo">
+
+<label>Provincia</label>
+<input type="text" id="provincia">
+
+<label>Observaciones</label>
+<textarea id="observaciones"></textarea>
+
+<button onclick="guardarCliente()">
+Guardar Cliente
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Clientes Registrados</h2>
+
+<table>
+
+<thead>
+<tr>
+<th>ID</th>
+<th>Nombre</th>
+<th>Teléfono</th>
+<th>Provincia</th>
+</tr>
+</thead>
+
+<tbody id="tablaClientes">
+
+</tbody>
+
+</table>
+
+</div>
+
+<script>
+
+let clientes =
+JSON.parse(localStorage.getItem("clientes")) || [];
+
+function mostrarClientes(){
+
+const tabla =
+document.getElementById("tablaClientes");
+
+tabla.innerHTML = "";
+
+clientes.forEach((c,index)=>{
+
+tabla.innerHTML += `
+<tr>
+<td>${index+1}</td>
+<td>${c.nombre}</td>
+<td>${c.telefono}</td>
+<td>${c.provincia}</td>
+</tr>
+`;
+
+});
+
+}
+
+function guardarCliente(){
+
+const nombre =
+document.getElementById("nombre").value;
+
+const telefono =
+document.getElementById("telefono").value;
+
+const correo =
+document.getElementById("correo").value;
+
+const provincia =
+document.getElementById("provincia").value;
+
+const observaciones =
+document.getElementById("observaciones").value;
+
+if(nombre===""){
+alert("Debe indicar el nombre");
+return;
+}
+
+clientes.push({
+nombre,
+telefono,
+correo,
+provincia,
+observaciones
+});
+
+localStorage.setItem(
+"clientes",
+JSON.stringify(clientes)
+);
+
+mostrarClientes();
+
+document.getElementById("nombre").value="";
+document.getElementById("telefono").value="";
+document.getElementById("correo").value="";
+document.getElementById("provincia").value="";
+document.getElementById("observaciones").value="";
+
+}
+
+mostrarClientes();
+
+</script>
+
+</body>
+
+</html>
