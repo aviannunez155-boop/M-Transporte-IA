@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contenedores</title>
+
+<style>
+
+body{
+font-family:Arial,sans-serif;
+background:#f5f6fa;
+padding:20px;
+}
+
+.card{
+background:white;
+padding:20px;
+border-radius:10px;
+margin-bottom:20px;
+box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+
+input,select{
+width:100%;
+padding:10px;
+margin-bottom:15px;
+}
+
+button{
+background:#0c63e7;
+color:white;
+border:none;
+padding:10px 20px;
+border-radius:6px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:#0c63e7;
+color:white;
+padding:10px;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>📦 Gestión de Contenedores</h1>
+
+<div class="card">
+
+<h2>Nuevo Contenedor</h2>
+
+<label>Número</label>
+<input type="text" id="numero">
+
+<label>Cliente</label>
+<input type="text" id="cliente">
+
+<label>Tipo</label>
+
+<select id="tipo">
+<option>20 Pies</option>
+<option>40 Pies</option>
+</select>
+
+<label>Puerto</label>
+<input type="text" id="puerto">
+
+<button onclick="guardarContenedor()">
+Guardar Contenedor
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Contenedores Registrados</h2>
+
+<table>
+
+<thead>
+<tr>
+<th>ID</th>
+<th>Número</th>
+<th>Cliente</th>
+<th>Tipo</th>
+<th>Puerto</th>
+</tr>
+</thead>
+
+<tbody id="tablaContenedores">
+
+</tbody>
+
+</table>
+
+</div>
+
+<script>
+
+let contenedores =
+JSON.parse(localStorage.getItem("contenedores")) || [];
+
+function mostrarContenedores(){
+
+let tabla =
+document.getElementById("tablaContenedores");
+
+tabla.innerHTML = "";
+
+contenedores.forEach((c,index)=>{
+
+tabla.innerHTML += `
+<tr>
+<td>${index + 1}</td>
+<td>${c.numero}</td>
+<td>${c.cliente}</td>
+<td>${c.tipo}</td>
+<td>${c.puerto}</td>
+</tr>
+`;
+
+});
+
+}
+
+function guardarContenedor(){
+
+const numero =
+document.getElementById("numero").value;
+
+const cliente =
+document.getElementById("cliente").value;
+
+const tipo =
+document.getElementById("tipo").value;
+
+const puerto =
+document.getElementById("puerto").value;
+
+if(numero===""){
+alert("Debe indicar el número");
+return;
+}
+
+contenedores.push({
+numero,
+cliente,
+tipo,
+puerto
+});
+
+localStorage.setItem(
+"contenedores",
+JSON.stringify(contenedores)
+);
+
+mostrarContenedores();
+
+document.getElementById("numero").value="";
+document.getElementById("cliente").value="";
+document.getElementById("puerto").value="";
+
+}
+
+mostrarContenedores();
+
+</script>
+
+</body>
+</html>
