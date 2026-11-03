@@ -114,75 +114,37 @@ Guardar Solicitud
 
 </div>
 
+<script src="/api.js"></script>
 <script>
-
-let servicios =
-JSON.parse(localStorage.getItem("servicios")) || [];
-
-function mostrarServicios(){
-
-const tabla =
-document.getElementById("tablaServicios");
-
-tabla.innerHTML = "";
-
-servicios.forEach((s,index)=>{
-
-tabla.innerHTML += `
-<tr>
-<td>${index+1}</td>
-<td>${s.cliente}</td>
-<td>${s.origen}</td>
-<td>${s.destino}</td>
-<td>${s.tipo}</td>
-</tr>
-`;
-
-});
-
+async function mostrarServicios() {
+  const tabla = document.getElementById("tablaServicios");
+  const servicios = await loadRecords("transportes");
+  tabla.innerHTML = servicios.map((s) => `
+    <tr><td>${s.id}</td><td>${s.cliente}</td><td>${s.origen}</td><td>${s.destino}</td><td>${s.tipo}</td></tr>
+  `).join("");
 }
 
-function guardarSolicitud(){
-
-const cliente =
-document.getElementById("cliente").value;
-
-const origen =
-document.getElementById("origen").value;
-
-const destino =
-document.getElementById("destino").value;
-
-const tipo =
-document.getElementById("tipo").value;
-
-if(cliente===""){
-alert("Debe indicar un cliente");
-return;
+async function guardarSolicitud() {
+  const record = {
+    cliente: document.getElementById("cliente").value,
+    origen: document.getElementById("origen").value,
+    destino: document.getElementById("destino").value,
+    tipo: document.getElementById("tipo").value
+  };
+  if (record.cliente === "") {
+    alert("Debe indicar un cliente");
+    return;
+  }
+  try {
+    await saveRecord("transportes", record);
+    await mostrarServicios();
+    ["cliente", "origen", "destino"].forEach((id) => document.getElementById(id).value = "");
+  } catch (error) {
+    showApiError(error);
+  }
 }
 
-servicios.push({
-cliente,
-origen,
-destino,
-tipo
-});
-
-localStorage.setItem(
-"servicios",
-JSON.stringify(servicios)
-);
-
-mostrarServicios();
-
-document.getElementById("cliente").value="";
-document.getElementById("origen").value="";
-document.getElementById("destino").value="";
-
-}
-
-mostrarServicios();
-
+mostrarServicios().catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 

@@ -2,16 +2,42 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const transportes = require('./routes/transportes');
-const clientes = require('./routes/clientes');
-const contenedores = require('./routes/contenedores');
-const cotizaciones = require('./routes/cotizaciones');
-const mensajes = require('./routes/mensajes');
+const database = require('./database');
+
+function sendJson(res, statusCode, data) {
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+}
+
+function readJsonBody(req) {
+    return new Promise((resolve, reject) => {
+        let body = '';
+        req.on('data', (chunk) => {
+            body += chunk;
+            if (body.length > 1024 * 1024) {
+                reject(new Error('El cuerpo de la solicitud es demasiado grande'));
+                req.destroy();
+            }
+        });
+        req.on('end', () => {
+            try {
+                resolve(body ? JSON.parse(body) : {});
+            } catch {
+                reject(new Error('JSON inválido'));
+            }
+        });
+        req.on('error', reject);
+    });
+}
+
+function awaitRequestBody(req) {
+    return readJsonBody(req);
+}
 
 const server = http.createServer((req, res) => {
 
     // RECURSOS COMPARTIDOS DE LA INTERFAZ
-    if (req.url === '/sidebar.css' || req.url === '/sidebar.js') {
+    if (req.url === '/sidebar.css' || req.url === '/sidebar.js' || req.url === '/api.js') {
         const archivo = path.join(__dirname, '../frontend', req.url.slice(1));
         const contentType = req.url.endsWith('.css') ? 'text/css' : 'application/javascript';
 
@@ -28,38 +54,29 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API TRANSPORTES
-    if (req.url === '/transportes') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(transportes));
-        return;
-    }
+    const resourceMatch = req.url.match(/^\/(transportes|clientes|contenedores|cotizaciones|mensajes)$/);
+    if (resourceMatch) {
+        const resource = resourceMatch[1];
+        try {
+            if (req.method === 'GET') {
+                sendJson(res, 200, database.list(resource));
+                return;
+            }
 
-    // API CLIENTES
-    if (req.url === '/clientes') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(clientes));
-        return;
-    }
+            if (req.method === 'POST') {
+                const payload = awaitRequestBody(req);
+                payload
+                    .then((body) => sendJson(res, 201, database.create(resource, body)))
+                    .catch((error) => sendJson(res, error.message === 'JSON inválido' ? 400 : 500, {
+                        error: error.message
+                    }));
+                return;
+            }
 
-    // API CONTENEDORES
-    if (req.url === '/contenedores') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(contenedores));
-        return;
-    }
-
-    // API COTIZACIONES
-    if (req.url === '/cotizaciones') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(cotizaciones));
-        return;
-    }
-
-    // API MENSAJES
-    if (req.url === '/mensajes') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(mensajes));
+            sendJson(res, 405, { error: 'Método no permitido' });
+        } catch (error) {
+            sendJson(res, error.statusCode || 500, { error: error.message });
+        }
         return;
     }
 

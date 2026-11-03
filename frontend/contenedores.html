@@ -111,75 +111,37 @@ Guardar Contenedor
 
 </div>
 
+<script src="/api.js"></script>
 <script>
-
-let contenedores =
-JSON.parse(localStorage.getItem("contenedores")) || [];
-
-function mostrarContenedores(){
-
-let tabla =
-document.getElementById("tablaContenedores");
-
-tabla.innerHTML = "";
-
-contenedores.forEach((c,index)=>{
-
-tabla.innerHTML += `
-<tr>
-<td>${index + 1}</td>
-<td>${c.numero}</td>
-<td>${c.cliente}</td>
-<td>${c.tipo}</td>
-<td>${c.puerto}</td>
-</tr>
-`;
-
-});
-
+async function mostrarContenedores() {
+  const tabla = document.getElementById("tablaContenedores");
+  const contenedores = await loadRecords("contenedores");
+  tabla.innerHTML = contenedores.map((c) => `
+    <tr><td>${c.id}</td><td>${c.numero}</td><td>${c.cliente}</td><td>${c.tipo}</td><td>${c.puerto}</td></tr>
+  `).join("");
 }
 
-function guardarContenedor(){
-
-const numero =
-document.getElementById("numero").value;
-
-const cliente =
-document.getElementById("cliente").value;
-
-const tipo =
-document.getElementById("tipo").value;
-
-const puerto =
-document.getElementById("puerto").value;
-
-if(numero===""){
-alert("Debe indicar el número");
-return;
+async function guardarContenedor() {
+  const record = {
+    numero: document.getElementById("numero").value,
+    cliente: document.getElementById("cliente").value,
+    tipo: document.getElementById("tipo").value,
+    puerto: document.getElementById("puerto").value
+  };
+  if (record.numero === "") {
+    alert("Debe indicar el número");
+    return;
+  }
+  try {
+    await saveRecord("contenedores", record);
+    await mostrarContenedores();
+    ["numero", "cliente", "puerto"].forEach((id) => document.getElementById(id).value = "");
+  } catch (error) {
+    showApiError(error);
+  }
 }
 
-contenedores.push({
-numero,
-cliente,
-tipo,
-puerto
-});
-
-localStorage.setItem(
-"contenedores",
-JSON.stringify(contenedores)
-);
-
-mostrarContenedores();
-
-document.getElementById("numero").value="";
-document.getElementById("cliente").value="";
-document.getElementById("puerto").value="";
-
-}
-
-mostrarContenedores();
-
+mostrarContenedores().catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 

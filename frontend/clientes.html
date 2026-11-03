@@ -122,80 +122,38 @@ Guardar Cliente
 
 </div>
 
+<script src="/api.js"></script>
 <script>
-
-let clientes =
-JSON.parse(localStorage.getItem("clientes")) || [];
-
-function mostrarClientes(){
-
-const tabla =
-document.getElementById("tablaClientes");
-
-tabla.innerHTML = "";
-
-clientes.forEach((c,index)=>{
-
-tabla.innerHTML += `
-<tr>
-<td>${index+1}</td>
-<td>${c.nombre}</td>
-<td>${c.telefono}</td>
-<td>${c.provincia}</td>
-</tr>
-`;
-
-});
-
+async function mostrarClientes() {
+  const tabla = document.getElementById("tablaClientes");
+  const clientes = await loadRecords("clientes");
+  tabla.innerHTML = clientes.map((c) => `
+    <tr><td>${c.id}</td><td>${c.nombre}</td><td>${c.telefono}</td><td>${c.provincia}</td></tr>
+  `).join("");
 }
 
-function guardarCliente(){
-
-const nombre =
-document.getElementById("nombre").value;
-
-const telefono =
-document.getElementById("telefono").value;
-
-const correo =
-document.getElementById("correo").value;
-
-const provincia =
-document.getElementById("provincia").value;
-
-const observaciones =
-document.getElementById("observaciones").value;
-
-if(nombre===""){
-alert("Debe indicar el nombre");
-return;
+async function guardarCliente() {
+  const record = {
+    nombre: document.getElementById("nombre").value,
+    telefono: document.getElementById("telefono").value,
+    correo: document.getElementById("correo").value,
+    provincia: document.getElementById("provincia").value,
+    observaciones: document.getElementById("observaciones").value
+  };
+  if (record.nombre === "") {
+    alert("Debe indicar el nombre");
+    return;
+  }
+  try {
+    await saveRecord("clientes", record);
+    await mostrarClientes();
+    ["nombre", "telefono", "correo", "provincia", "observaciones"].forEach((id) => document.getElementById(id).value = "");
+  } catch (error) {
+    showApiError(error);
+  }
 }
 
-clientes.push({
-nombre,
-telefono,
-correo,
-provincia,
-observaciones
-});
-
-localStorage.setItem(
-"clientes",
-JSON.stringify(clientes)
-);
-
-mostrarClientes();
-
-document.getElementById("nombre").value="";
-document.getElementById("telefono").value="";
-document.getElementById("correo").value="";
-document.getElementById("provincia").value="";
-document.getElementById("observaciones").value="";
-
-}
-
-mostrarClientes();
-
+mostrarClientes().catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 

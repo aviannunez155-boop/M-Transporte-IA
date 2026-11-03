@@ -161,99 +161,42 @@ Guardar Cotización
 
 </div>
 
+<script src="/api.js"></script>
 <script>
-
-let cotizaciones =
-JSON.parse(localStorage.getItem("cotizaciones")) || [];
-
-function mostrarCotizaciones(){
-
-const tabla =
-document.getElementById("tablaCotizaciones");
-
-tabla.innerHTML = "";
-
-cotizaciones.forEach((c,index)=>{
-
-tabla.innerHTML += `
-<tr>
-<td>${index+1}</td>
-<td>${c.cliente}</td>
-<td>${c.servicio}</td>
-<td>$${c.importe}</td>
-<td>${c.estado}</td>
-</tr>
-`;
-
-});
-
+async function mostrarCotizaciones() {
+  const tabla = document.getElementById("tablaCotizaciones");
+  const cotizaciones = await loadRecords("cotizaciones");
+  tabla.innerHTML = cotizaciones.map((c) => `
+    <tr><td>${c.id}</td><td>${c.cliente}</td><td>${c.servicio}</td><td>$${c.importe}</td><td>${c.estado}</td></tr>
+  `).join("");
 }
 
-function guardarCotizacion(){
-
-const cliente =
-document.getElementById("cliente").value;
-
-const telefono =
-document.getElementById("telefono").value;
-
-const origen =
-document.getElementById("origen").value;
-
-const destino =
-document.getElementById("destino").value;
-
-const servicio =
-document.getElementById("servicio").value;
-
-const importe =
-document.getElementById("importe").value;
-
-const estado =
-document.getElementById("estado").value;
-
-const observaciones =
-document.getElementById("observaciones").value;
-
-if(cliente===""){
-
-alert("Debe indicar el cliente");
-
-return;
-
+async function guardarCotizacion() {
+  const record = {
+    cliente: document.getElementById("cliente").value,
+    telefono: document.getElementById("telefono").value,
+    origen: document.getElementById("origen").value,
+    destino: document.getElementById("destino").value,
+    servicio: document.getElementById("servicio").value,
+    importe: document.getElementById("importe").value,
+    estado: document.getElementById("estado").value,
+    observaciones: document.getElementById("observaciones").value
+  };
+  if (record.cliente === "") {
+    alert("Debe indicar el cliente");
+    return;
+  }
+  try {
+    await saveRecord("cotizaciones", record);
+    await mostrarCotizaciones();
+    ["cliente", "telefono", "origen", "destino", "importe", "observaciones"]
+      .forEach((id) => document.getElementById(id).value = "");
+  } catch (error) {
+    showApiError(error);
+  }
 }
 
-cotizaciones.push({
-
-cliente,
-telefono,
-origen,
-destino,
-servicio,
-importe,
-estado,
-observaciones
-
-});
-
-localStorage.setItem(
-"cotizaciones",
-JSON.stringify(cotizaciones)
-);
-
-mostrarCotizaciones();
-
-document.getElementById("cliente").value="";
-document.getElementById("telefono").value="";
-document.getElementById("origen").value="";
-document.getElementById("destino").value="";
-document.getElementById("importe").value="";
-document.getElementById("observaciones").value="";
-
-}
-
-mostrarCotizaciones();
-
+mostrarCotizaciones().catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 

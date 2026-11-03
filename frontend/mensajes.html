@@ -111,69 +111,36 @@ Guardar Mensaje
 
 </div>
 
+<script src="/api.js"></script>
 <script>
-
-let mensajes =
-JSON.parse(localStorage.getItem("mensajes")) || [];
-
-function mostrarMensajes(){
-
-const tabla =
-document.getElementById("tablaMensajes");
-
-tabla.innerHTML = "";
-
-mensajes.forEach((m,index)=>{
-
-tabla.innerHTML += `
-<tr>
-<td>${index+1}</td>
-<td>${m.canal}</td>
-<td>${m.cliente}</td>
-<td>${m.mensaje}</td>
-</tr>
-`;
-
-});
-
+async function mostrarMensajes() {
+  const tabla = document.getElementById("tablaMensajes");
+  const mensajes = await loadRecords("mensajes");
+  tabla.innerHTML = mensajes.map((m) => `
+    <tr><td>${m.id}</td><td>${m.canal}</td><td>${m.cliente}</td><td>${m.mensaje}</td></tr>
+  `).join("");
 }
 
-function guardarMensaje(){
-
-const canal =
-document.getElementById("canal").value;
-
-const cliente =
-document.getElementById("cliente").value;
-
-const mensaje =
-document.getElementById("mensaje").value;
-
-if(cliente===""){
-alert("Debe indicar el cliente");
-return;
+async function guardarMensaje() {
+  const record = {
+    canal: document.getElementById("canal").value,
+    cliente: document.getElementById("cliente").value,
+    mensaje: document.getElementById("mensaje").value
+  };
+  if (record.cliente === "") {
+    alert("Debe indicar el cliente");
+    return;
+  }
+  try {
+    await saveRecord("mensajes", record);
+    await mostrarMensajes();
+    ["cliente", "mensaje"].forEach((id) => document.getElementById(id).value = "");
+  } catch (error) {
+    showApiError(error);
+  }
 }
 
-mensajes.push({
-canal,
-cliente,
-mensaje
-});
-
-localStorage.setItem(
-"mensajes",
-JSON.stringify(mensajes)
-);
-
-mostrarMensajes();
-
-document.getElementById("cliente").value="";
-document.getElementById("mensaje").value="";
-
-}
-
-mostrarMensajes();
-
+mostrarMensajes().catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 
