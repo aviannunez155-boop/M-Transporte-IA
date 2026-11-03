@@ -1,184 +1,221 @@
-<!DOCTYPE html>
-<html lang="es">
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MiTransporte IA</title>
+const transportes = require('./routes/transportes');
+const clientes = require('./routes/clientes');
+const contenedores = require('./routes/contenedores');
+const cotizaciones = require('./routes/cotizaciones');
+const mensajes = require('./routes/mensajes');
 
-<style>
+const server = http.createServer((req, res) => {
 
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Arial,sans-serif;
-}
+    // API TRANSPORTES
+    if (req.url === '/transportes') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(transportes));
+        return;
+    }
 
-body{
-display:flex;
-background:#f5f6fa;
-}
+    // API CLIENTES
+    if (req.url === '/clientes') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(clientes));
+        return;
+    }
 
-.sidebar{
-width:250px;
-height:100vh;
-background:#0c63e7;
-padding:20px;
-color:white;
-}
+    // API CONTENEDORES
+    if (req.url === '/contenedores') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(contenedores));
+        return;
+    }
 
-.sidebar h2{
-margin-bottom:20px;
-}
+    // API COTIZACIONES
+    if (req.url === '/cotizaciones') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(cotizaciones));
+        return;
+    }
 
-.sidebar ul{
-list-style:none;
-}
+    // API MENSAJES
+    if (req.url === '/mensajes') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(mensajes));
+        return;
+    }
 
-.sidebar li{
-margin-bottom:10px;
-}
+    // DASHBOARD
+    if (req.url === '/' || req.url === '/dashboard') {
 
-.sidebar a{
-display:block;
-padding:12px;
-background:rgba(255,255,255,0.15);
-border-radius:8px;
-color:white;
-text-decoration:none;
-}
+        const archivo = path.join(
+            __dirname,
+            '../frontend/dashboard.html'
+        );
 
-.sidebar a:hover{
-background:rgba(255,255,255,0.25);
-}
+        fs.readFile(archivo, (err, data) => {
 
-.content{
-flex:1;
-padding:25px;
-}
+            if (err) {
+                res.writeHead(500);
+                res.end('Error cargando dashboard');
+                return;
+            }
 
-.header{
-background:white;
-padding:20px;
-border-radius:12px;
-margin-bottom:20px;
-box-shadow:0 2px 6px rgba(0,0,0,.1);
-}
+            res.writeHead(200, {
+                'Content-Type': 'text/html'
+            });
 
-.cards{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-gap:20px;
-}
+            res.end(data);
 
-.card{
-background:white;
-padding:20px;
-border-radius:12px;
-box-shadow:0 2px 6px rgba(0,0,0,.1);
-}
+        });
 
-.card h3{
-color:#0c63e7;
-margin-bottom:10px;
-}
+        return;
+    }
 
-.numero{
-font-size:36px;
-font-weight:bold;
-color:#0c63e7;
-}
+    // TRANSPORTES APP
+    if (req.url === '/transportes-app') {
 
-</style>
+        const archivo = path.join(
+            __dirname,
+            '../frontend/transportes.html'
+        );
 
-</head>
+        fs.readFile(archivo, (err, data) => {
 
-<body>
+            if (err) {
+                res.writeHead(500);
+                res.end('Error cargando transportes');
+                return;
+            }
 
-<div class="sidebar">
+            res.writeHead(200, {
+                'Content-Type': 'text/html'
+            });
 
-<h2>MiTransporte IA</h2>
+            res.end(data);
 
-<ul>
+        });
 
-<li>
-<a href="/dashboard">Dashboard</a>
-</li>
+        return;
+    }
 
-<li>
-<a href="/transportes-app">Transportes</a>
-</li>
+    // CLIENTES APP
+    if (req.url === '/clientes-app') {
 
-<li>
-<a href="/clientes-app">Clientes</a>
-</li>
+        const archivo = path.join(
+            __dirname,
+            '../frontend/clientes.html'
+        );
 
-<li>
-<a href="/contenedores-app">Contenedores</a>
-</li>
+        fs.readFile(archivo, (err, data) => {
 
-<li>
-<a href="/cotizaciones-app">Cotizaciones</a>
-</li>
+            if (err) {
+                res.writeHead(500);
+                res.end('Error cargando clientes');
+                return;
+            }
 
-<li>
-<a href="#">Mensajes</a>
-</li>
+            res.writeHead(200, {
+                'Content-Type': 'text/html'
+            });
 
-<li>
-<a href="#">Reportes</a>
-</li>
+            res.end(data);
 
-<li>
-<a href="#">Configuración</a>
-</li>
+        });
 
-</ul>
+        return;
+    }
 
-</div>
+    // CONTENEDORES APP
+    if (req.url === '/contenedores-app') {
 
-<div class="content">
+        const archivo = path.join(
+            __dirname,
+            '../frontend/contenedores.html'
+        );
 
-<div class="header">
+        fs.readFile(archivo, (err, data) => {
 
-<h1>Panel Principal</h1>
+            if (err) {
+                res.writeHead(500);
+                res.end('Error cargando contenedores');
+                return;
+            }
 
-<p>Centro de Gestión Empresarial</p>
+            res.writeHead(200, {
+                'Content-Type': 'text/html'
+            });
 
-</div>
+            res.end(data);
 
-<div class="cards">
+        });
 
-<div class="card">
-<h3>Transportes</h3>
-<div class="numero">1</div>
-</div>
+        return;
+    }
 
-<div class="card">
-<h3>Clientes</h3>
-<div class="numero">1</div>
-</div>
+    // COTIZACIONES APP
+    if (req.url === '/cotizaciones-app') {
 
-<div class="card">
-<h3>Contenedores</h3>
-<div class="numero">1</div>
-</div>
+        const archivo = path.join(
+            __dirname,
+            '../frontend/cotizaciones.html'
+        );
 
-<div class="card">
-<h3>Cotizaciones</h3>
-<div class="numero">1</div>
-</div>
+        fs.readFile(archivo, (err, data) => {
 
-<div class="card">
-<h3>Mensajes</h3>
-<div class="numero">0</div>
-</div>
+            if (err) {
+                res.writeHead(500);
+                res.end('Error cargando cotizaciones');
+                return;
+            }
 
-</div>
+            res.writeHead(200, {
+                'Content-Type': 'text/html'
+            });
 
-</div>
+            res.end(data);
 
-</body>
+        });
 
-</html>
+        return;
+    }
+
+    // MENSAJES APP
+    if (req.url === '/mensajes-app') {
+
+        const archivo = path.join(
+            __dirname,
+            '../frontend/mensajes.html'
+        );
+
+        fs.readFile(archivo, (err, data) => {
+
+            if (err) {
+                res.writeHead(500);
+                res.end('Error cargando mensajes');
+                return;
+            }
+
+            res.writeHead(200, {
+                'Content-Type': 'text/html'
+            });
+
+            res.end(data);
+
+        });
+
+        return;
+    }
+
+    // 404
+    res.writeHead(404, {
+        'Content-Type': 'text/plain'
+    });
+
+    res.end('Ruta no encontrada');
+
+});
+
+server.listen(3000, () => {
+    console.log('Servidor iniciado en puerto 3000');
+});
