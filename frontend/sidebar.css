@@ -1,0 +1,67 @@
+:root {
+  --navy: #101c3d;
+  --navy-light: #1a2a55;
+  --blue: #2f6df6;
+  --ink: #17213d;
+  --muted: #7d89a8;
+  --surface: #f5f7fb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100vh;
+  background: var(--surface) !important;
+  color: var(--ink);
+}
+
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
+  display: flex;
+  width: 252px;
+  flex-direction: column;
+  padding: 25px 16px 18px;
+  color: #fff;
+  background: var(--navy);
+}
+
+.brand { display: flex; align-items: center; gap: 11px; padding: 0 12px 35px; }
+.brand-mark {
+  display: grid; width: 36px; height: 36px; place-items: center;
+  border-radius: 10px; color: #fff; background: var(--blue);
+  font-size: 21px; font-weight: 800;
+}
+.brand strong { display: block; font-size: 17px; letter-spacing: -.3px; }
+.brand span { display: block; margin-top: 3px; color: #91a0c8; font-size: 8px; letter-spacing: 1.4px; font-weight: 700; }
+.sidebar-nav { flex: 1; }
+.nav-caption { display: block; padding: 0 14px 12px; color: #68789f; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; }
+.nav-item {
+  display: flex; align-items: center; gap: 13px; margin: 4px 0; padding: 12px 14px;
+  border-radius: 9px; color: #aab6d4; font-size: 14px; font-weight: 600; text-decoration: none;
+  transition: background .2s, color .2s;
+}
+.nav-item:hover { color: #fff; background: var(--navy-light); }
+.nav-item.active { color: #fff; background: var(--blue); box-shadow: 0 5px 13px rgba(47, 109, 246, .22); }
+.nav-icon { width: 17px; color: currentColor; font-size: 19px; line-height: 1; text-align: center; }
+.sidebar-footer { margin-top: auto; }
+.help-card { display: flex; gap: 10px; align-items: center; margin: 8px 3px 20px; padding: 12px; border: 1px solid #263762; border-radius: 9px; }
+.help-icon { display: grid; width: 23px; height: 23px; place-items: center; border-radius: 50%; color: #a8c0ff; background: #273967; font-weight: 700; }
+.help-card strong, .user-card strong { display: block; font-size: 11px; }
+.help-card small, .user-card small { display: block; margin-top: 4px; color: #8190b3; font-size: 10px; }
+.user-card { display: flex; align-items: center; gap: 10px; padding: 14px 8px 0; border-top: 1px solid #26345b; }
+.avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: #24489a; background: #b7ceff; font-size: 10px; font-weight: 800; }
+.user-menu { margin-left: auto; color: #8290b0; letter-spacing: 1px; }
+.main-content { min-height: 100vh; margin-left: 252px; padding: 34px 42px; }
+.mobile-menu, .sidebar-close { display: none; }
+
+@media (max-width: 760px) {
+  .sidebar { transform: translateX(-100%); transition: transform .2s ease; }
+  .sidebar-open .sidebar { transform: translateX(0); }
+  .main-content { margin-left: 0; padding: 62px 18px 24px; }
+  .mobile-menu { display: block; position: fixed; top: 15px; left: 15px; z-index: 10; width: 40px; height: 40px; border: 0; border-radius: 9px; color: #fff; background: var(--navy); font-size: 21px; cursor: pointer; }
+  .sidebar-close { display: block; position: absolute; top: 18px; right: 16px; border: 0; color: #aab6d4; background: transparent; font-size: 25px; cursor: pointer; }
+}

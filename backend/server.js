@@ -10,6 +10,24 @@ const mensajes = require('./routes/mensajes');
 
 const server = http.createServer((req, res) => {
 
+    // RECURSOS COMPARTIDOS DE LA INTERFAZ
+    if (req.url === '/sidebar.css' || req.url === '/sidebar.js') {
+        const archivo = path.join(__dirname, '../frontend', req.url.slice(1));
+        const contentType = req.url.endsWith('.css') ? 'text/css' : 'application/javascript';
+
+        fs.readFile(archivo, (err, data) => {
+            if (err) {
+                res.writeHead(500);
+                res.end('Error cargando recurso de interfaz');
+                return;
+            }
+
+            res.writeHead(200, { 'Content-Type': contentType });
+            res.end(data);
+        });
+        return;
+    }
+
     // API TRANSPORTES
     if (req.url === '/transportes') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -155,32 +173,6 @@ const server = http.createServer((req, res) => {
 
     // COTIZACIONES APP
     if (req.url === '/cotizaciones-app') {
-        if (req.url === '/mensajes-app') {
-
-    const archivo = path.join(
-        __dirname,
-        '../frontend/mensajes.html'
-    );
-
-    fs.readFile(archivo, (err, data) => {
-
-        if (err) {
-            res.writeHead(500);
-            res.end('Error cargando mensajes');
-            return;
-        }
-
-        res.writeHead(200, {
-            'Content-Type': 'text/html'
-        });
-
-        res.end(data);
-
-    });
-
-    return;
-}
-
         const archivo = path.join(
             __dirname,
             '../frontend/cotizaciones.html'
