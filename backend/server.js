@@ -155,6 +155,31 @@ const server = http.createServer((req, res) => {
 
     // COTIZACIONES APP
     if (req.url === '/cotizaciones-app') {
+        if (req.url === '/mensajes-app') {
+
+    const archivo = path.join(
+        __dirname,
+        '../frontend/mensajes.html'
+    );
+
+    fs.readFile(archivo, (err, data) => {
+
+        if (err) {
+            res.writeHead(500);
+            res.end('Error cargando mensajes');
+            return;
+        }
+
+        res.writeHead(200, {
+            'Content-Type': 'text/html'
+        });
+
+        res.end(data);
+
+    });
+
+    return;
+}
 
         const archivo = path.join(
             __dirname,

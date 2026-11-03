@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mensajes</title>
+
+<style>
+
+body{
+font-family:Arial,sans-serif;
+background:#f5f6fa;
+padding:20px;
+}
+
+.card{
+background:white;
+padding:20px;
+border-radius:10px;
+margin-bottom:20px;
+box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+
+input, textarea, select{
+width:100%;
+padding:10px;
+margin-bottom:15px;
+}
+
+button{
+background:#0c63e7;
+color:white;
+border:none;
+padding:10px 20px;
+border-radius:6px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:#0c63e7;
+color:white;
+padding:10px;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>Mensajes</h1>
+
+<div class="card">
+
+<h2>Nuevo Mensaje</h2>
+
+<label>Canal</label>
+
+<select id="canal">
+<option>WhatsApp</option>
+<option>Facebook</option>
+<option>Instagram</option>
+<option>Telegram</option>
+<option>Correo</option>
+</select>
+
+<label>Cliente</label>
+<input type="text" id="cliente">
+
+<label>Mensaje</label>
+<textarea id="mensaje"></textarea>
+
+<button onclick="guardarMensaje()">
+Guardar Mensaje
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Mensajes Registrados</h2>
+
+<table>
+
+<thead>
+<tr>
+<th>ID</th>
+<th>Canal</th>
+<th>Cliente</th>
+<th>Mensaje</th>
+</tr>
+</thead>
+
+<tbody id="tablaMensajes">
+
+</tbody>
+
+</table>
+
+</div>
+
+<script>
+
+let mensajes =
+JSON.parse(localStorage.getItem("mensajes")) || [];
+
+function mostrarMensajes(){
+
+const tabla =
+document.getElementById("tablaMensajes");
+
+tabla.innerHTML = "";
+
+mensajes.forEach((m,index)=>{
+
+tabla.innerHTML += `
+<tr>
+<td>${index+1}</td>
+<td>${m.canal}</td>
+<td>${m.cliente}</td>
+<td>${m.mensaje}</td>
+</tr>
+`;
+
+});
+
+}
+
+function guardarMensaje(){
+
+const canal =
+document.getElementById("canal").value;
+
+const cliente =
+document.getElementById("cliente").value;
+
+const mensaje =
+document.getElementById("mensaje").value;
+
+if(cliente===""){
+alert("Debe indicar el cliente");
+return;
+}
+
+mensajes.push({
+canal,
+cliente,
+mensaje
+});
+
+localStorage.setItem(
+"mensajes",
+JSON.stringify(mensajes)
+);
+
+mostrarMensajes();
+
+document.getElementById("cliente").value="";
+document.getElementById("mensaje").value="";
+
+}
+
+mostrarMensajes();
+
+</script>
+
+</body>
+
+</html>
