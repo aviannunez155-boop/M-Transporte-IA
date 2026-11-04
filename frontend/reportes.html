@@ -26,7 +26,7 @@ h1{margin:0 0 7px;color:#17213d;font-size:28px}.subtitle{margin:0 0 26px;color:#
 <form class="filters" id="reportFilters">
   <label class="filter-field">Desde<input type="date" id="fromDate"></label>
   <label class="filter-field">Hasta<input type="date" id="toDate"></label>
-  <label class="filter-field">Estado<select id="statusFilter"><option value="">Todos los estados</option><option>Pendiente</option><option>Aprobado</option><option>En Proceso</option><option>Finalizado</option></select></label>
+  <label class="filter-field">Estado<select id="statusFilter"><option value="">Todos los estados</option><option>Pendiente</option><option>Pagada</option><option>Vencida</option><option>Cancelada</option><option>Aprobado</option><option>En Proceso</option><option>Finalizado</option></select></label>
   <div class="filter-actions">
     <button type="submit">Aplicar filtros</button>
     <button type="button" class="secondary" id="clearFilters">Limpiar</button>
@@ -74,7 +74,10 @@ async function renderReports() {
     {label:"Total",value:data.facturas.total},
     {label:"Pendientes",value:invoiceStatus("Pendiente")},
     {label:"Pagadas",value:invoiceStatus("Pagada")},
-    {label:"Vencidas",value:invoiceStatus("Vencida")}
+    {label:"Vencidas",value:invoiceStatus("Vencida")},
+    {label:"Canceladas",value:invoiceStatus("Cancelada")},
+    {label:"Total facturado",value:money(data.facturas.totalValue)},
+    {label:"Total pendiente",value:money(data.facturas.pendingValue)}
   ]) + "<h3>Por estado</h3>" + bars(data.facturas.byStatus);
 }
 function filterQuery() {

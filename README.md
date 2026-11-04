@@ -119,7 +119,23 @@ También incluye los últimos 10 eventos de actividad y alertas operativas. La
 vista `/dashboard` permite los periodos Hoy, Esta semana, Este mes, Este año
 y personalizado, con actualización automática cada 30 segundos. Las tablas
 `actividad` y `auditoria` son inmutables desde la API para preservar la
-trazabilidad.
+trazabilidad. `GET /trazabilidad/transportes/:id` devuelve el flujo completo,
+la línea temporal de estados y la auditoría de cliente, cotización,
+transporte, contenedores y facturas relacionadas. También se puede consultar
+la auditoría puntual con `GET /auditoria/:modulo/:id`.
+
+### Facturación
+
+El módulo `/facturas-app` gestiona facturas relacionadas con cliente,
+cotización, transporte y contenedor. Cada factura conserva número, importe,
+fecha de emisión, vencimiento, pago y observaciones. Sus estados son
+`Pendiente`, `Pagada`, `Vencida` y `Cancelada`; el pago registra la fecha,
+actualiza la trazabilidad y finaliza el servicio asociado. La API REST expone
+`GET/POST /facturas`, `PUT/PATCH /facturas/:id` y
+`PATCH /facturas/:id/estado`, con aislamiento por empresa y permisos
+`facturas.read`/`facturas.manage`. El dashboard y los reportes incluyen total
+facturado, total pendiente, facturas pendientes, pagadas, vencidas y
+canceladas.
 
 ### Reportes empresariales
 

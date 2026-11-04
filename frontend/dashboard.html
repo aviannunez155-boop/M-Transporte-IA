@@ -285,10 +285,10 @@
       ? data.operational.alerts.map((alert) => `<div class="alert-item ${alert.level === "info" ? "info" : ""}">${escapeHtml(alert.message)}</div>`).join("")
       : '<div class="empty">No hay alertas operativas.</div>';
     document.getElementById("financialSummary").innerHTML = [
-      ["Facturación pendiente", data.financial.pendingInvoices],
+      ["Facturas pendientes", data.financial.pendingInvoices],
       ["Facturas pagadas", data.financial.paidInvoices],
-      ["Facturación mensual", data.financial.billingByMonth.reduce((sum, item) => sum + Number(item.value || 0), 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })],
-      ["Facturación anual", data.financial.billingByYear.reduce((sum, item) => sum + Number(item.value || 0), 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })]
+      ["Total facturado", Number(data.financial.totalInvoiced || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })],
+      ["Total pendiente", Number(data.financial.totalPending || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })]
     ].map(([label, value]) => `<div class="metric-item"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
     const topClients = document.getElementById("topClientsChart");
     if (data.charts.topClients.length) {

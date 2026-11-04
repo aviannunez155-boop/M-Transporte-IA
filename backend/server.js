@@ -223,6 +223,24 @@ const server = http.createServer((req, res) => {
     }
 
     const rolePermissionsMatch = req.url.match(/^\/roles\/(\d+)\/permisos$/);
+    const auditTrailMatch = req.url.match(/^\/auditoria\/([a-z_]+)\/(\d+)$/);
+    if (auditTrailMatch) {
+        const resource = auditTrailMatch[1];
+        if (!hasPermission(req.actor, `${resource}.read`)) {
+            denyAccess(res, 403, 'No tiene permisos para consultar la auditoría');
+            return;
+        }
+        if (req.method !== 'GET') {
+            sendJson(res, 405, { error: 'Método no permitido' });
+            return;
+        }
+        try {
+            sendJson(res, 200, database.auditTrail(resource, auditTrailMatch[2], req.actor.empresa_id));
+        } catch (error) {
+            sendJson(res, error.statusCode || 500, { error: error.message });
+        }
+        return;
+    }
     const traceabilityMatch = req.url.match(/^\/trazabilidad\/(transportes|contenedores)\/(\d+)$/);
     if (traceabilityMatch) {
         if (!hasPermission(req.actor, 'transportes.read')) {
