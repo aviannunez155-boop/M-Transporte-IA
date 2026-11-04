@@ -33,6 +33,24 @@ td{padding:10px;border-bottom:1px solid #eef1f7;color:#35415f}
 <p class="subtitle">Gestiona usuarios, configuración y trazabilidad del sistema.</p>
 <section class="admin-grid">
   <div class="panel">
+    <h2>Empresas</h2>
+    <form id="companyForm">
+      <label for="companyName">Nombre</label><input id="companyName" required>
+      <label for="companyIdentifier">Identificador</label><input id="companyIdentifier" required placeholder="empresa-demo">
+      <button>Crear empresa</button>
+    </form>
+    <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Identificador</th><th>Estado</th></tr></thead><tbody id="companiesTable"></tbody></table></div>
+  </div>
+  <div class="panel">
+    <h2>Sucursales de la empresa activa</h2>
+    <form id="branchForm">
+      <label for="branchName">Nombre</label><input id="branchName" required>
+      <label for="branchAddress">Dirección</label><input id="branchAddress">
+      <button>Crear sucursal</button>
+    </form>
+    <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Dirección</th><th>Estado</th></tr></thead><tbody id="branchesTable"></tbody></table></div>
+  </div>
+  <div class="panel">
     <h2>Usuarios</h2>
     <form id="userForm">
       <label for="userName">Nombre</label><input id="userName" required>
@@ -75,7 +93,11 @@ td{padding:10px;border-bottom:1px solid #eef1f7;color:#35415f}
   </div>
   <div class="panel wide">
     <h2>Auditoría de cambios</h2>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Módulo</th><th>Acción</th><th>Registro</th><th>Detalles</th></tr></thead><tbody id="auditTable"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Usuario</th><th>Módulo</th><th>Acción</th><th>Registro</th><th>Detalles</th></tr></thead><tbody id="auditTable"></tbody></table></div>
+  </div>
+  <div class="panel wide">
+    <h2>Historial de estados</h2>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Usuario</th><th>Módulo</th><th>Registro</th><th>Anterior</th><th>Nuevo</th></tr></thead><tbody id="historyTable"></tbody></table></div>
   </div>
 </section>
 <script src="/api.js"></script>
@@ -83,16 +105,20 @@ td{padding:10px;border-bottom:1px solid #eef1f7;color:#35415f}
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const formatDate = (value) => new Date(String(value).replace(" ","T") + "Z").toLocaleString("es-ES");
 async function render() {
-  const [users, roles, settings, activity, audit, permissions, rolePermissions] = await Promise.all([
+  const [companies, branches, users, roles, settings, activity, audit, history, permissions, rolePermissions] = await Promise.all([
+    loadRecords("empresas"), loadRecords("sucursales"),
     loadRecords("usuarios"), loadRecords("roles"), loadRecords("configuracion"),
-    loadRecords("actividad"), loadRecords("auditoria"), loadRecords("permisos"), loadRecords("rol_permisos")
+    loadRecords("actividad"), loadRecords("auditoria"), loadRecords("historial_estados"), loadRecords("permisos"), loadRecords("rol_permisos")
   ]);
+  document.getElementById("companiesTable").innerHTML = companies.map((company) => `<tr><td>${escapeHtml(company.nombre)}</td><td>${escapeHtml(company.identificador)}</td><td>${escapeHtml(company.estado)}</td></tr>`).join("");
+  document.getElementById("branchesTable").innerHTML = branches.map((branch) => `<tr><td>${escapeHtml(branch.nombre)}</td><td>${escapeHtml(branch.direccion)}</td><td>${escapeHtml(branch.estado)}</td></tr>`).join("");
   document.getElementById("userRole").innerHTML = roles.map((r) => `<option value="${r.id}">${escapeHtml(r.nombre)}</option>`).join("");
   document.getElementById("usersTable").innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.nombre)}</td><td>${escapeHtml(u.correo)}</td><td>${escapeHtml(u.rol)}</td><td>${escapeHtml(u.estado)}</td></tr>`).join("");
   document.getElementById("rolesTable").innerHTML = roles.map((r) => `<tr><td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.descripcion)}</td></tr>`).join("");
   document.getElementById("settingsTable").innerHTML = settings.map((s) => `<tr><td>${escapeHtml(s.clave)}</td><td>${escapeHtml(s.valor)}</td><td>${escapeHtml(s.descripcion)}</td></tr>`).join("");
   document.getElementById("activityTable").innerHTML = activity.map((a) => `<tr><td>${formatDate(a.created_at)}</td><td>${escapeHtml(a.modulo)}</td><td>${escapeHtml(a.accion)}</td><td>${escapeHtml(a.descripcion)}</td></tr>`).join("");
-  document.getElementById("auditTable").innerHTML = audit.map((a) => `<tr><td>${formatDate(a.created_at)}</td><td>${escapeHtml(a.modulo)}</td><td>${escapeHtml(a.accion)}</td><td>${escapeHtml(a.registro_id)}</td><td>${escapeHtml(a.detalles)}</td></tr>`).join("");
+  document.getElementById("auditTable").innerHTML = audit.map((a) => `<tr><td>${formatDate(a.created_at)}</td><td>${escapeHtml(a.usuario || "Sistema")}</td><td>${escapeHtml(a.modulo)}</td><td>${escapeHtml(a.accion)}</td><td>${escapeHtml(a.registro_id)}</td><td>${escapeHtml(a.detalles)}</td></tr>`).join("");
+  document.getElementById("historyTable").innerHTML = history.map((h) => `<tr><td>${formatDate(h.created_at)}</td><td>${escapeHtml(h.usuario || "Sistema")}</td><td>${escapeHtml(h.modulo)}</td><td>${escapeHtml(h.registro_id)}</td><td>${escapeHtml(h.estado_anterior || "Inicial")}</td><td>${escapeHtml(h.estado_nuevo)}</td></tr>`).join("");
   const roleSelect = document.getElementById("permissionRole");
   roleSelect.innerHTML = roles.map((role) => `<option value="${role.id}">${escapeHtml(role.nombre)}</option>`).join("");
   const renderPermissions = () => {
@@ -108,6 +134,8 @@ async function submitForm(form, resource, payload) {
   try { await saveRecord(resource, payload); form.reset(); await render(); } catch (error) { showApiError(error); }
 }
 document.getElementById("userForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "usuarios", { nombre:document.getElementById("userName").value, correo:document.getElementById("userEmail").value, password:document.getElementById("userPassword").value, rol_id:document.getElementById("userRole").value, estado:document.getElementById("userStatus").value }); });
+document.getElementById("companyForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "empresas", { nombre:document.getElementById("companyName").value, identificador:document.getElementById("companyIdentifier").value, estado:"Activa" }); });
+document.getElementById("branchForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "sucursales", { nombre:document.getElementById("branchName").value, direccion:document.getElementById("branchAddress").value, estado:"Activa" }); });
 document.getElementById("roleForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "roles", { nombre:document.getElementById("roleName").value, descripcion:document.getElementById("roleDescription").value }); });
 document.getElementById("settingsForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "configuracion", { clave:document.getElementById("settingKey").value, valor:document.getElementById("settingValue").value, descripcion:document.getElementById("settingDescription").value }); });
 document.getElementById("savePermissions").addEventListener("click", async () => {

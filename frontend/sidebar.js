@@ -6,6 +6,8 @@
     { href: "/contenedores-app", label: "Contenedores", icon: "▣" },
     { href: "/cotizaciones-app", label: "Cotizaciones", icon: "▤" },
     { href: "/mensajes-app", label: "Mensajes", icon: "✉" },
+    { href: "/facturas-app", label: "Facturación", icon: "$" },
+    { href: "/seguimiento-app", label: "Seguimiento", icon: "◎" },
     { href: "/reportes-app", label: "Reportes", icon: "▥" },
     { href: "/administracion-app", label: "Administración", icon: "⚙" }
   ];
@@ -47,8 +49,8 @@
         <div><strong>¿Necesitas ayuda?</strong><small>Habla con soporte</small></div>
       </div>
       <div class="user-card">
-        <div class="avatar">AG</div>
-        <div><strong>Admin General</strong><small>Administrador</small></div>
+        <div class="avatar" id="sessionAvatar">--</div>
+        <div><strong id="sessionName">Usuario</strong><small id="sessionRole">Sesión activa</small></div>
         <button class="user-menu" type="button" aria-label="Cerrar sesión">Salir</button>
       </div>
     </div>
@@ -68,5 +70,31 @@
   sidebar.querySelectorAll(".nav-item").forEach((link) => link.addEventListener("click", closeMenu));
   sidebar.querySelector(".user-menu").addEventListener("click", () => {
     fetch("/api/logout", { method: "POST" }).finally(() => { window.location.href = "/login"; });
+  });
+  fetch("/api/session").then((response) => response.ok ? response.json() : null).then((session) => {
+    if (!session) return;
+    const name = session.nombre || "Usuario";
+    document.getElementById("sessionName").textContent = name;
+    document.getElementById("sessionRole").textContent = session.rol || "Usuario";
+    document.getElementById("sessionAvatar").textContent = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+    const permissions = new Set(session.permissions || []);
+    const required = {
+      "/dashboard": "dashboard.read",
+      "/transportes-app": "transportes.read",
+      "/clientes-app": "clientes.read",
+      "/contenedores-app": "contenedores.read",
+      "/cotizaciones-app": "cotizaciones.read",
+      "/mensajes-app": "mensajes.read",
+      "/facturas-app": "facturas.read",
+      "/seguimiento-app": "transportes.read",
+      "/reportes-app": "reports.read",
+      "/administracion-app": "administracion.manage"
+    };
+    if (session.rol !== "Administrador") {
+      sidebar.querySelectorAll(".nav-item").forEach((link) => {
+        const permission = required[link.getAttribute("href")];
+        if (permission && !permissions.has(permission)) link.remove();
+      });
+    }
   });
 })();

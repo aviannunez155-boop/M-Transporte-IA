@@ -15,6 +15,11 @@
   .stat-label { color:#7d89a8; font-size:13px; }
   .stat-value { display:block; margin-top:12px; font-size:28px; }
   .stat-change { color:#2caa72; font-size:12px; }
+  .executive-indicators { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:18px; }
+  .indicator { display:flex; align-items:center; gap:15px; padding:18px 22px; border:1px solid #e8ecf5; border-radius:12px; background:#fff; box-shadow:0 3px 12px rgba(25,42,80,.04); }
+  .indicator-icon { display:grid; width:42px; height:42px; flex:none; place-items:center; border-radius:12px; color:#2f6df6; background:#edf3ff; font-size:20px; }
+  .indicator-label { display:block; color:#7d89a8; font-size:12px; }
+  .indicator-value { display:block; margin-top:5px; color:#17213d; font-size:24px; }
   .dashboard-grid { display:grid; grid-template-columns:1.6fr 1fr; gap:18px; margin-top:18px; }
   .panel h2 { margin:0 0 18px; font-size:17px; }
   .empty { padding:35px 10px; color:#9aa5bf; text-align:center; }
@@ -32,28 +37,94 @@
   .chart-column i { display:block; width:100%; max-width:42px; min-height:4px; border-radius:6px 6px 0 0; background:#2f6df6; }
   .chart-column strong { color:#253153; font-size:11px; }
   .chart-legend { margin-top:12px; color:#7d89a8; font-size:11px; }
-  @media (max-width:1100px) { .stats { grid-template-columns:repeat(3,1fr); } }
-  @media (max-width:900px) { .stats { grid-template-columns:repeat(2,1fr); } .dashboard-grid { grid-template-columns:1fr; } }
-  @media (max-width:520px) { .welcome { display:block; } .date { display:block; margin-top:12px; } }
+  .dashboard-filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin-bottom:18px; padding:16px 20px; border:1px solid #e8ecf5; border-radius:12px; background:#fff; }
+  .dashboard-filters label { display:flex; flex-direction:column; gap:6px; color:#7d89a8; font-size:11px; font-weight:600; }
+  .dashboard-filters input { padding:9px 10px; border:1px solid #dfe5f1; border-radius:7px; color:#253153; font:inherit; }
+  .dashboard-filters button { padding:10px 15px; border:0; border-radius:7px; color:#fff; background:#2f6df6; cursor:pointer; font:inherit; }
+  .dashboard-filters button[type="button"] { color:#526080; background:#edf1f8; }
+  .dashboard-filters select { padding:9px 10px; border:1px solid #dfe5f1; border-radius:7px; color:#253153; font:inherit; }
+  .metric-list { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .metric-item { padding:13px; border-radius:9px; background:#f7f9fd; }
+  .metric-item span { display:block; color:#7d89a8; font-size:11px; }
+  .metric-item strong { display:block; margin-top:6px; color:#17213d; font-size:20px; }
+  .compact-chart { display:flex; flex-direction:column; gap:9px; }
+  .compact-row { display:grid; grid-template-columns:minmax(90px, .7fr) 2fr auto; align-items:center; gap:10px; color:#7d89a8; font-size:11px; }
+  .compact-row strong { color:#253153; font-size:11px; text-align:right; }
+  .compact-track { height:8px; overflow:hidden; border-radius:8px; background:#edf1f8; }
+  .compact-track i { display:block; height:100%; min-width:3px; border-radius:8px; background:#2f6df6; }
+  .chart-note { margin-top:12px; color:#9aa5bf; font-size:11px; }
+  .operations-board { display:grid; grid-template-columns:repeat(7,1fr); gap:12px; }
+  .operation-card { padding:16px; border:1px solid #e8ecf5; border-radius:10px; background:#f8faff; }
+  .operation-card span { display:block; min-height:30px; color:#7d89a8; font-size:11px; line-height:1.35; }
+  .operation-card strong { display:block; margin-top:9px; color:#17213d; font-size:25px; }
+  .monitoring-status { display:flex; align-items:center; gap:7px; margin-top:10px; color:#2caa72; font-size:10px; }
+  .monitoring-status i { display:block; width:7px; height:7px; border-radius:50%; background:#2caa72; }
+  .kpi-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-top:18px; }
+  .kpi-card { padding:16px; border:1px solid #e8ecf5; border-radius:10px; background:#fff; box-shadow:0 3px 12px rgba(25,42,80,.04); }
+  .kpi-card span { display:block; min-height:30px; color:#7d89a8; font-size:11px; line-height:1.35; }
+  .kpi-card strong { display:block; margin-top:8px; color:#17213d; font-size:24px; }
+  .alert-list { display:flex; flex-direction:column; gap:9px; }
+  .alert-item { padding:11px 13px; border-left:3px solid #f0ad4e; border-radius:6px; background:#fff8e8; color:#72551c; font-size:12px; }
+  .alert-item.info { border-color:#2f6df6; background:#edf3ff; color:#274e9b; }
+  .ranking-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .ranking-grid .metric-item { display:flex; justify-content:space-between; gap:10px; }
+  .finance-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  @media (max-width:1100px) { .stats { grid-template-columns:repeat(3,1fr); } .kpi-grid { grid-template-columns:repeat(3,1fr); } .operations-board { grid-template-columns:repeat(4,1fr); } }
+  @media (max-width:900px) { .stats { grid-template-columns:repeat(2,1fr); } .executive-indicators { grid-template-columns:1fr; } .dashboard-grid { grid-template-columns:1fr; } }
+  @media (max-width:520px) { .welcome { display:block; } .date { display:block; margin-top:12px; } .kpi-grid, .ranking-grid, .finance-summary { grid-template-columns:1fr; } .operations-board { grid-template-columns:repeat(2,1fr); } }
 </style>
 </head>
 <body>
-<div class="welcome"><div><h1 id="welcomeTitle">Resumen operativo</h1><p>Este es el resumen de tu operación de transporte.</p></div><span class="date" id="currentDate"></span></div>
+<div class="welcome"><div><h1 id="welcomeTitle">Panel ejecutivo</h1><p>Visión general comercial y operativa de tu transporte.</p></div><span class="date" id="currentDate"></span></div>
+<form class="dashboard-filters" id="dashboardFilters">
+  <label>Periodo<select id="periodPreset"><option value="">Personalizado</option><option value="today">Hoy</option><option value="week">Esta semana</option><option value="month">Este mes</option><option value="year">Este año</option></select></label>
+  <label>Desde<input type="date" id="dashboardFrom"></label>
+  <label>Hasta<input type="date" id="dashboardTo"></label>
+  <button type="submit">Aplicar filtros</button>
+  <button type="button" id="clearDashboardFilters">Limpiar</button>
+</form>
+<section class="kpi-grid" aria-label="KPIs ejecutivos" id="kpiGrid"></section>
 <section class="stats">
   <div class="stat"><span class="stat-label">Clientes registrados</span><strong class="stat-value" id="clientesCount">—</strong><span class="stat-change">Base de clientes</span></div>
   <div class="stat"><span class="stat-label">Cotizaciones registradas</span><strong class="stat-value" id="cotizacionesCount">—</strong><span class="stat-change">Todas las cotizaciones</span></div>
   <div class="stat"><span class="stat-label">Transportes registrados</span><strong class="stat-value" id="transportesCount">—</strong><span class="stat-change">Todos los transportes</span></div>
   <div class="stat"><span class="stat-label">Contenedores registrados</span><strong class="stat-value" id="contenedoresCount">—</strong><span class="stat-change">Inventario total</span></div>
   <div class="stat"><span class="stat-label">Mensajes registrados</span><strong class="stat-value" id="mensajesCount">—</strong><span class="stat-change">Todos los mensajes</span></div>
+  <div class="stat"><span class="stat-label">Facturas registradas</span><strong class="stat-value" id="facturasCount">—</strong><span class="stat-change">Control de facturación</span></div>
 </section>
+<section class="executive-indicators" aria-label="Indicadores ejecutivos">
+  <div class="indicator"><span class="indicator-icon">◷</span><div><span class="indicator-label">Cotizaciones pendientes</span><strong class="indicator-value" id="pendingQuotes">—</strong></div></div>
+  <div class="indicator"><span class="indicator-icon">↗</span><div><span class="indicator-label">Transportes en proceso</span><strong class="indicator-value" id="transportsInProcess">—</strong></div></div>
+  <div class="indicator"><span class="indicator-icon">✓</span><div><span class="indicator-label">Servicios finalizados</span><strong class="indicator-value" id="finishedServices">—</strong></div></div>
+</section>
+<section class="panel" style="margin-top:18px"><h2>Seguimiento operacional <small class="monitoring-status"><i></i>Actualización automática</small></h2><div class="operations-board" id="operationsBoard"><div class="loading">Cargando seguimiento...</div></div></section>
 <section class="dashboard-grid">
   <div class="panel"><h2>Actividad reciente</h2><div class="loading" id="activity">Cargando actividad...</div></div>
   <div class="panel"><h2>Volumen por módulo</h2><div class="loading" id="volumeChart">Cargando métricas...</div></div>
 </section>
 <section class="dashboard-grid">
-  <div class="panel"><h2>Estados operativos</h2><div class="loading" id="statusChart">Cargando métricas...</div></div>
-  <div class="panel"><h2>Accesos rápidos</h2><div class="empty">Usa el menú lateral para gestionar tu operación.</div></div>
+  <div class="panel"><h2>Actividad mensual</h2><div class="loading" id="monthlyActivityChart">Cargando métricas...</div></div>
+  <div class="panel"><h2>Alertas operativas</h2><div class="alert-list" id="alerts"><div class="loading">Cargando alertas...</div></div></div>
 </section>
+<section class="panel" style="margin-top:18px"><h2>Dashboard comercial</h2><div class="ranking-grid" id="commercialRankings"><div class="loading">Cargando rankings...</div></div></section>
+<section class="panel" style="margin-top:18px"><h2>Dashboard financiero</h2><div class="finance-summary" id="financialSummary"><div class="loading">Cargando métricas...</div></div><div class="loading" id="annualBillingChart">Cargando facturación anual...</div></section>
+<section class="dashboard-grid">
+  <div class="panel"><h2>Estados operativos</h2><div class="loading" id="statusChart">Cargando métricas...</div></div>
+  <div class="panel"><h2>Indicadores comerciales</h2><div class="metric-list" id="commercialMetrics"><div class="loading">Cargando métricas...</div></div></div>
+</section>
+<section class="dashboard-grid">
+  <div class="panel"><h2>Indicadores operativos</h2><div class="metric-list" id="operationalMetrics"><div class="loading">Cargando métricas...</div></div></div>
+  <div class="panel"><h2>Totales por estado</h2><div class="loading" id="moduleStatusChart">Cargando métricas...</div></div>
+</section>
+<section class="dashboard-grid">
+  <div class="panel"><h2>Clientes por provincia</h2><div class="loading" id="provinceChart">Cargando métricas...</div></div>
+  <div class="panel"><h2>Top clientes</h2><div class="loading" id="topClientsChart">Cargando métricas...</div></div>
+</section>
+<section class="dashboard-grid">
+  <div class="panel"><h2>Cotizaciones por estado</h2><div class="loading" id="quoteStatusChart">Cargando métricas...</div></div>
+  <div class="panel"><h2>Transportes por estado</h2><div class="loading" id="transportStatusChart">Cargando métricas...</div></div>
+</section>
+<section class="panel" style="margin-top:18px"><h2>Facturación mensual</h2><div class="loading" id="billingChart">Cargando métricas...</div></section>
 <section class="panel" style="margin-top:18px"><h2>Últimos registros creados</h2><div class="loading" id="recentRecords">Cargando registros...</div></section>
 <script src="/api.js"></script>
 <script>
@@ -62,14 +133,17 @@
     cotizaciones: "cotizacionesCount",
     transportes: "transportesCount",
     contenedores: "contenedoresCount",
-    mensajes: "mensajesCount"
+    mensajes: "mensajesCount",
+    facturas: "facturasCount"
   };
   const activityIcons = {
     Clientes: "♙",
     Cotizaciones: "▤",
     Transportes: "↗",
     Contenedores: "▣",
-    Mensajes: "✉"
+    Mensajes: "✉",
+    Facturas: "$",
+    Usuarios: "♟"
   };
 
   function formatDate(value) {
@@ -85,14 +159,64 @@
     }[character]));
   }
 
-  async function renderDashboard() {
-    const [data, session] = await Promise.all([loadDashboardData(), getSession()]);
+  function renderCompactChart(elementId, values, valueKey = "value", formatValue = (value) => value) {
+    const element = document.getElementById(elementId);
+    if (!values.length) {
+      element.className = "empty";
+      element.textContent = "Sin datos para el periodo seleccionado.";
+      return;
+    }
+
+    function renderRanking(elementId, groups) {
+      document.getElementById(elementId).innerHTML = groups.map(([title, values, field]) => `
+        <div><h3 style="margin:0 0 10px;font-size:13px;color:#253153">${title}</h3>
+        ${values.length ? values.map((item) => `<div class="metric-item"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item[field] || 0)}</strong></div>`).join("") : '<div class="empty">Sin datos</div>'}</div>
+      `).join("");
+    }
+    element.className = "compact-chart";
+    const maximum = Math.max(...values.map((item) => Number(item[valueKey]) || 0), 1);
+    element.innerHTML = values.map((item) => {
+      const value = Number(item[valueKey]) || 0;
+      return `<div class="compact-row"><span title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span><div class="compact-track"><i style="width:${value / maximum * 100}%"></i></div><strong>${escapeHtml(formatValue(value))}</strong></div>`;
+    }).join("");
+  }
+
+  async function renderDashboard(query = "") {
+    const [data, session] = await Promise.all([loadDashboardData(query), getSession()]);
     if (session?.nombre) {
       document.getElementById("welcomeTitle").textContent = `Buenos días, ${session.nombre} 👋`;
     }
     Object.entries(countIds).forEach(([module, id]) => {
       document.getElementById(id).textContent = data.counts[module];
     });
+    const kpis = data.kpis;
+    const kpiItems = [
+      ["Total clientes", kpis.totalClients], ["Total cotizaciones", kpis.totalQuotes],
+      ["Cotizaciones pendientes", kpis.pendingQuotes], ["Cotizaciones aprobadas", kpis.approvedQuotes],
+      ["Total transportes", kpis.totalTransports], ["Transportes en proceso", kpis.transportsInProcess],
+      ["Transportes finalizados", kpis.transportsFinished], ["Total contenedores", kpis.totalContainers],
+      ["Contenedores activos", kpis.activeContainers], ["Total mensajes", kpis.totalMessages],
+      ["Total usuarios", kpis.totalUsers]
+    ];
+    document.getElementById("kpiGrid").innerHTML = kpiItems.map(([label, value]) =>
+      `<div class="kpi-card"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`
+    ).join("");
+    document.getElementById("pendingQuotes").textContent = kpis.pendingQuotes;
+    document.getElementById("transportsInProcess").textContent = kpis.transportsInProcess;
+    document.getElementById("finishedServices").textContent = kpis.transportsFinished;
+    const monitoring = data.operational.monitoring;
+    const operationItems = [
+      ["Cotizaciones pendientes", monitoring.pendingQuotes],
+      ["Cotizaciones aprobadas", monitoring.approvedQuotes],
+      ["Transportes en proceso", monitoring.transportsInProcess],
+      ["Transportes finalizados", monitoring.transportsFinished],
+      ["Contenedores activos", monitoring.activeContainers],
+      ["Contenedores entregados", monitoring.deliveredContainers],
+      ["Facturas pendientes", monitoring.pendingInvoices]
+    ];
+    document.getElementById("operationsBoard").innerHTML = operationItems.map(([label, value]) =>
+      `<div class="operation-card"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`
+    ).join("");
     const activity = document.getElementById("activity");
     activity.className = data.activity.length ? "activity-list" : "empty";
     activity.innerHTML = data.activity.length
@@ -107,20 +231,77 @@
     const modules = [
       ["Clientes", data.counts.clientes], ["Cotizaciones", data.counts.cotizaciones],
       ["Transportes", data.counts.transportes], ["Contenedores", data.counts.contenedores],
-      ["Mensajes", data.counts.mensajes]
+      ["Mensajes", data.counts.mensajes], ["Facturas", data.counts.facturas]
     ];
     const maxModule = Math.max(...modules.map((item) => item[1]), 1);
     document.getElementById("volumeChart").innerHTML = `
       <div class="dashboard-chart">${modules.map(([label, value]) => `
         <div class="chart-column"><strong>${value}</strong><i style="height:${value / maxModule * 100}%"></i><span>${label}</span></div>
       `).join("")}</div><div class="chart-legend">Registros acumulados por módulo</div>`;
-    const statuses = data.reports.cotizaciones.byStatus;
+    const statuses = data.reports.transportes.byStatus;
     const maxStatus = Math.max(...statuses.map((item) => item.value), 1);
     document.getElementById("statusChart").innerHTML = statuses.length
       ? `<div class="dashboard-chart">${statuses.map((item) => `
           <div class="chart-column"><strong>${item.value}</strong><i style="height:${item.value / maxStatus * 100}%"></i><span>${escapeHtml(item.label)}</span></div>
-        `).join("")}</div><div class="chart-legend">Cotizaciones agrupadas por estado</div>`
+        `).join("")}</div><div class="chart-legend">Transportes agrupados por estado</div>`
       : "Sin estados registrados.";
+    document.getElementById("commercialMetrics").innerHTML = [
+        ["Valor cotizado", Number(data.commercial.quotedValue || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })],
+        ["Ticket medio", Number(data.commercial.averageQuote || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })],
+        ["Cotizaciones aprobadas", data.commercial.approvedQuotes],
+        ["Conversión comercial", `${data.commercial.conversionRate}%`]
+    ].map(([label, value]) => `<div class="metric-item"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+    document.getElementById("operationalMetrics").innerHTML = [
+        ["Transportes en proceso", data.operational.transportsInProcess],
+        ["Servicios finalizados", data.operational.finishedServices],
+        ["Contenedores registrados", data.counts.contenedores],
+        ["Facturas registradas", data.counts.facturas]
+    ].map(([label, value]) => `<div class="metric-item"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+    const moduleStatuses = [
+        ["Cotizaciones", data.reports.cotizaciones.byStatus],
+        ["Transportes", data.reports.transportes.byStatus],
+        ["Contenedores", data.reports.contenedores.byStatus],
+        ["Facturas", data.reports.facturas.byStatus]
+    ];
+    document.getElementById("moduleStatusChart").innerHTML = moduleStatuses.map(([module, values]) =>
+        `<div class="chart-legend"><strong>${module}</strong>: ${values.length ? values.map((item) => `${escapeHtml(item.label)} (${item.value})`).join(" · ") : "sin registros"}</div>`
+    ).join("");
+    renderCompactChart("provinceChart", data.charts.clientsByProvince);
+    renderCompactChart("quoteStatusChart", data.charts.quotationsByStatus);
+    renderCompactChart("transportStatusChart", data.charts.transportsByStatus);
+    renderCompactChart("billingChart", data.charts.billingByMonth, "value", (value) =>
+        Number(value).toLocaleString("es-ES", { minimumFractionDigits: 2 })
+    );
+    renderCompactChart("monthlyActivityChart", data.charts.activityByMonth);
+    renderCompactChart("annualBillingChart", data.financial.billingByYear, "value", (value) =>
+        Number(value).toLocaleString("es-ES", { minimumFractionDigits: 2 })
+    );
+    renderRanking("commercialRankings", [
+      ["Más cotizaciones", data.commercial.rankings.topByQuotes, "quotations"],
+      ["Más transportes", data.commercial.rankings.topByTransports, "transports"],
+      ["Más activos", data.commercial.rankings.mostActive, "activity"]
+    ]);
+    document.getElementById("alerts").innerHTML = data.operational.alerts.length
+      ? data.operational.alerts.map((alert) => `<div class="alert-item ${alert.level === "info" ? "info" : ""}">${escapeHtml(alert.message)}</div>`).join("")
+      : '<div class="empty">No hay alertas operativas.</div>';
+    document.getElementById("financialSummary").innerHTML = [
+      ["Facturación pendiente", data.financial.pendingInvoices],
+      ["Facturas pagadas", data.financial.paidInvoices],
+      ["Facturación mensual", data.financial.billingByMonth.reduce((sum, item) => sum + Number(item.value || 0), 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })],
+      ["Facturación anual", data.financial.billingByYear.reduce((sum, item) => sum + Number(item.value || 0), 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })]
+    ].map(([label, value]) => `<div class="metric-item"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+    const topClients = document.getElementById("topClientsChart");
+    if (data.charts.topClients.length) {
+        topClients.className = "compact-chart";
+        topClients.innerHTML = data.charts.topClients.map((item) => `
+          <div class="compact-row"><span title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+            <div class="compact-track"><i style="width:${Number(item.quotedValue || 0) / Math.max(...data.charts.topClients.map((client) => Number(client.quotedValue) || 0), 1) * 100}%"></i></div>
+            <strong>${Number(item.quotedValue || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}</strong>
+          </div>`).join("");
+    } else {
+        topClients.className = "empty";
+        topClients.textContent = "Sin clientes con cotizaciones en el periodo.";
+    }
     const recentRecords = document.getElementById("recentRecords");
     recentRecords.className = data.recentRecords.length ? "activity-list" : "empty";
     recentRecords.innerHTML = data.recentRecords.length
@@ -137,6 +318,63 @@
   document.getElementById("currentDate").textContent = new Date().toLocaleDateString("es-ES", {
     weekday: "long", day: "numeric", month: "long", year: "numeric"
   });
+  const dashboardFilters = document.getElementById("dashboardFilters");
+  function setPreset(preset) {
+    if (!preset) return;
+    const now = new Date();
+    const start = new Date(now);
+    if (preset === "today") start.setHours(0, 0, 0, 0);
+    if (preset === "week") {
+      const day = start.getDay() || 7;
+      start.setDate(start.getDate() - day + 1);
+      start.setHours(0, 0, 0, 0);
+    }
+    if (preset === "month") {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+    }
+    if (preset === "year") {
+      start.setMonth(0, 1);
+      start.setHours(0, 0, 0, 0);
+    }
+    const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    document.getElementById("dashboardFrom").value = iso(start);
+    document.getElementById("dashboardTo").value = iso(now);
+  }
+  document.getElementById("periodPreset").addEventListener("change", (event) => {
+    setPreset(event.target.value);
+    if (event.target.value) renderDashboard(dashboardQuery()).catch(console.error);
+  });
+  function dashboardQuery() {
+    const params = new URLSearchParams();
+    if (document.getElementById("dashboardFrom").value) params.set("from", document.getElementById("dashboardFrom").value);
+    if (document.getElementById("dashboardTo").value) params.set("to", document.getElementById("dashboardTo").value);
+    return params.toString() ? `?${params}` : "";
+  }
+  dashboardFilters.addEventListener("submit", (event) => {
+    event.preventDefault();
+    renderDashboard(dashboardQuery()).catch((error) => {
+      console.error(error);
+      document.getElementById("activity").textContent = error.message || "No se pudo cargar el dashboard.";
+    });
+  });
+  document.getElementById("clearDashboardFilters").addEventListener("click", () => {
+    document.getElementById("periodPreset").value = "";
+    document.getElementById("dashboardFrom").value = "";
+    document.getElementById("dashboardTo").value = "";
+    renderDashboard().catch((error) => {
+      console.error(error);
+      document.getElementById("activity").textContent = "No se pudo cargar el dashboard.";
+    });
+  });
+  let refreshInProgress = false;
+  setInterval(() => {
+    if (refreshInProgress) return;
+    refreshInProgress = true;
+    renderDashboard(dashboardQuery())
+      .catch((error) => console.error("No se pudo actualizar el seguimiento operacional", error))
+      .finally(() => { refreshInProgress = false; });
+  }, 30000);
   renderDashboard().catch((error) => {
     console.error(error);
     document.getElementById("activity").textContent = "No se pudo cargar la actividad.";

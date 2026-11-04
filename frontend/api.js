@@ -6,16 +6,16 @@ async function loadRecords(resource) {
   return response.json();
 }
 
-async function loadDashboardData() {
-  const response = await fetch("/dashboard-data");
+async function loadDashboardData(query = "") {
+  const response = await fetch(`/dashboard-data${query}`);
   if (!response.ok) {
     throw new Error("No se pudo cargar el resumen del dashboard");
   }
   return response.json();
 }
 
-async function loadReports() {
-  const response = await fetch("/reports");
+async function loadReports(query = "") {
+  const response = await fetch(`/reports${query}`);
   if (!response.ok) {
     throw new Error("No se pudieron cargar los reportes");
   }

@@ -6,6 +6,9 @@ const database = new DatabaseSync(
     path.join(__dirname, 'mitransporte.sqlite')
 );
 database.exec('PRAGMA foreign_keys = ON');
+const tenantTables = ['clientes', 'cotizaciones', 'transportes', 'contenedores', 'mensajes', 'facturas',
+    'usuarios', 'configuracion', 'actividad', 'auditoria', 'historial_estados', 'sucursales'];
+const saasTables = ['empresas', 'sucursales'];
 
 const definitions = {
     clientes: {
@@ -30,13 +33,26 @@ const definitions = {
     mensajes: {
         columns: ['canal', 'cliente', 'mensaje', 'estado'],
         seed: require('./routes/mensajes')
+    },
+    facturas: {
+        columns: [
+            'cliente_id', 'transporte_id', 'contenedor_id', 'numero',
+            'importe', 'estado', 'fecha_emision', 'fecha_pago', 'observaciones'
+        ],
+        seed: []
     }
+
 };
 
 const adminDefinitions = {
     roles: {
         columns: ['nombre', 'descripcion'],
-        seed: [{ nombre: 'Administrador', descripcion: 'Acceso completo al sistema' }]
+        seed: [
+            { nombre: 'Administrador', descripcion: 'Acceso completo al sistema' },
+            { nombre: 'Operador', descripcion: 'Gestiona la operación logística' },
+            { nombre: 'Comercial', descripcion: 'Gestiona clientes y cotizaciones' },
+            { nombre: 'Consulta', descripcion: 'Consulta dashboards y reportes' }
+        ]
     },
     usuarios: {
         columns: ['nombre', 'correo', 'rol_id', 'estado'],
@@ -115,6 +131,78 @@ for (const [table, definition] of Object.entries(adminDefinitions)) {
 }
 
 database.exec(`
+    CREATE TABLE IF NOT EXISTS empresas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        identificador TEXT NOT NULL UNIQUE,
+        estado TEXT NOT NULL DEFAULT 'Activa',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS sucursales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        nombre TEXT NOT NULL,
+        direccion TEXT NOT NULL DEFAULT '',
+        estado TEXT NOT NULL DEFAULT 'Activa',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+`);
+for (const table of tenantTables) {
+    const columns = database.prepare(`PRAGMA table_info("${table}")`).all();
+    if (!columns.some((column) => column.name === 'empresa_id')) {
+        database.exec(`ALTER TABLE "${table}" ADD COLUMN empresa_id INTEGER REFERENCES empresas(id)`);
+    }
+}
+for (const table of ['clientes', 'cotizaciones', 'transportes', 'contenedores', 'mensajes', 'facturas']) {
+    const columns = database.prepare(`PRAGMA table_info("${table}")`).all();
+    if (!columns.some((column) => column.name === 'sucursal_id')) {
+        database.exec(`ALTER TABLE "${table}" ADD COLUMN sucursal_id INTEGER REFERENCES sucursales(id)`);
+    }
+}
+const configurationSql = database.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'configuracion'"
+).get()?.sql || '';
+if (configurationSql.includes('clave" TEXT UNIQUE') || configurationSql.includes('clave TEXT UNIQUE')) {
+    database.exec(`
+        CREATE TABLE configuracion_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clave TEXT NOT NULL,
+            valor TEXT NOT NULL DEFAULT '',
+            descripcion TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            empresa_id INTEGER REFERENCES empresas(id),
+            UNIQUE (empresa_id, clave)
+        );
+        INSERT INTO configuracion_new (id, clave, valor, descripcion, created_at, empresa_id)
+        SELECT id, clave, valor, descripcion, created_at, empresa_id FROM configuracion;
+        DROP TABLE configuracion;
+        ALTER TABLE configuracion_new RENAME TO configuracion;
+    `);
+}
+const defaultCompany = database.prepare('SELECT id FROM empresas ORDER BY id LIMIT 1').get()
+    || (() => {
+        const result = database.prepare(
+            'INSERT INTO empresas (nombre, identificador) VALUES (?, ?)'
+        ).run('MiTransporte IA', 'mitransporte-default');
+        return { id: Number(result.lastInsertRowid) };
+    })();
+database.prepare('UPDATE empresas SET identificador = ? WHERE id = ?')
+    .run('mitransporte-default', defaultCompany.id);
+for (const table of tenantTables) {
+    database.prepare(`UPDATE "${table}" SET empresa_id = ? WHERE empresa_id IS NULL`)
+        .run(defaultCompany.id);
+}
+database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_sucursales_empresa ON sucursales(empresa_id);
+    CREATE INDEX IF NOT EXISTS idx_usuarios_empresa ON usuarios(empresa_id);
+    CREATE INDEX IF NOT EXISTS idx_clientes_empresa ON clientes(empresa_id);
+    CREATE INDEX IF NOT EXISTS idx_cotizaciones_empresa ON cotizaciones(empresa_id);
+    CREATE INDEX IF NOT EXISTS idx_transportes_empresa ON transportes(empresa_id);
+    CREATE INDEX IF NOT EXISTS idx_contenedores_empresa ON contenedores(empresa_id);
+    CREATE INDEX IF NOT EXISTS idx_facturas_empresa ON facturas(empresa_id);
+`);
+
+database.exec(`
     CREATE TABLE IF NOT EXISTS permisos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         clave TEXT NOT NULL UNIQUE,
@@ -146,13 +234,45 @@ database.exec(`
         ON historial_estados (modulo, registro_id, created_at);
 `);
 
+const defaultRoles = [
+    ['Administrador', 'Acceso completo al sistema'],
+    ['Operador', 'Gestiona la operación logística'],
+    ['Comercial', 'Gestiona clientes y cotizaciones'],
+    ['Consulta', 'Consulta dashboards y reportes']
+];
+for (const [name, description] of defaultRoles) {
+    let roles = database.prepare('SELECT id FROM roles WHERE nombre = ? ORDER BY id').all(name);
+    if (!roles.length) {
+        database.prepare('INSERT INTO roles (nombre, descripcion) VALUES (?, ?)').run(name, description);
+        roles = database.prepare('SELECT id FROM roles WHERE nombre = ? ORDER BY id').all(name);
+    }
+    const canonicalId = roles[0].id;
+    for (const duplicate of roles.slice(1)) {
+        database.prepare(`
+            INSERT OR IGNORE INTO rol_permisos (rol_id, permiso_id)
+            SELECT ?, permiso_id FROM rol_permisos WHERE rol_id = ?
+        `).run(canonicalId, duplicate.id);
+        database.prepare('UPDATE usuarios SET rol_id = ? WHERE rol_id = ?').run(canonicalId, duplicate.id);
+        database.prepare('DELETE FROM rol_permisos WHERE rol_id = ?').run(duplicate.id);
+        database.prepare('DELETE FROM roles WHERE id = ?').run(duplicate.id);
+    }
+}
+database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_nombre ON roles(nombre)');
+
 const defaultPermissions = [
     ['dashboard.read', 'Ver el dashboard'],
+    ['clientes.read', 'Consultar clientes'],
     ['clientes.manage', 'Gestionar clientes'],
+    ['cotizaciones.read', 'Consultar cotizaciones'],
     ['cotizaciones.manage', 'Gestionar cotizaciones'],
+    ['transportes.read', 'Consultar transportes'],
     ['transportes.manage', 'Gestionar transportes'],
+    ['contenedores.read', 'Consultar contenedores'],
     ['contenedores.manage', 'Gestionar contenedores'],
+    ['mensajes.read', 'Consultar mensajes'],
     ['mensajes.manage', 'Gestionar mensajes'],
+    ['facturas.read', 'Consultar facturas'],
+    ['facturas.manage', 'Gestionar facturas'],
     ['reports.read', 'Ver reportes'],
     ['administracion.manage', 'Gestionar administración']
 ];
@@ -166,6 +286,20 @@ if (adminRole) {
         INSERT OR IGNORE INTO rol_permisos (rol_id, permiso_id)
         SELECT ?, id FROM permisos
     `).run(adminRole.id);
+}
+const rolePermissions = {
+    Operador: ['dashboard.read', 'clientes.read', 'clientes.manage', 'cotizaciones.read', 'transportes.read', 'transportes.manage', 'contenedores.read', 'contenedores.manage', 'mensajes.read', 'mensajes.manage', 'facturas.read', 'facturas.manage'],
+    Comercial: ['dashboard.read', 'clientes.read', 'clientes.manage', 'cotizaciones.read', 'cotizaciones.manage', 'mensajes.read', 'mensajes.manage', 'reports.read'],
+    Consulta: ['dashboard.read', 'clientes.read', 'cotizaciones.read', 'transportes.read', 'contenedores.read', 'mensajes.read', 'facturas.read', 'reports.read']
+};
+for (const [roleName, permissionKeys] of Object.entries(rolePermissions)) {
+    const role = database.prepare('SELECT id FROM roles WHERE nombre = ?').get(roleName);
+    if (!role) continue;
+    const insertRolePermission = database.prepare(`
+        INSERT OR IGNORE INTO rol_permisos (rol_id, permiso_id)
+        SELECT ?, id FROM permisos WHERE clave = ?
+    `);
+    permissionKeys.forEach((key) => insertRolePermission.run(role.id, key));
 }
 
 function addColumn(table, column, definition) {
@@ -187,6 +321,9 @@ database.exec(`
     CREATE INDEX IF NOT EXISTS idx_transportes_cotizacion_id ON transportes(cotizacion_id);
     CREATE INDEX IF NOT EXISTS idx_contenedores_cliente_id ON contenedores(cliente_id);
     CREATE INDEX IF NOT EXISTS idx_contenedores_transporte_id ON contenedores(transporte_id);
+    CREATE INDEX IF NOT EXISTS idx_facturas_cliente_id ON facturas(cliente_id);
+    CREATE INDEX IF NOT EXISTS idx_facturas_transporte_id ON facturas(transporte_id);
+    CREATE INDEX IF NOT EXISTS idx_facturas_contenedor_id ON facturas(contenedor_id);
 `);
 
 const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
@@ -247,14 +384,51 @@ database.exec(`
     UPDATE mensajes SET estado = 'Pendiente' WHERE estado = 'Nuevo';
 `);
 
-function list(table) {
+function tenantClause(empresaId, alias = '') {
+    return empresaId ? {
+        sql: `${alias ? `${alias}.` : ''}empresa_id = ?`,
+        params: [Number(empresaId)]
+    } : { sql: '', params: [] };
+}
+
+function assertTenantRecord(table, id, empresaId) {
+    if (!empresaId || !tenantTables.includes(table)) return;
+    const record = database.prepare(`SELECT id FROM "${table}" WHERE id = ? AND empresa_id = ?`)
+        .get(Number(id), Number(empresaId));
+    if (!record) throw notFoundError();
+}
+
+function list(table, empresaId = null) {
+    if (table === 'empresas') {
+        return database.prepare('SELECT * FROM empresas ORDER BY id DESC').all();
+    }
+    if (table === 'sucursales') {
+        const scope = tenantClause(empresaId, 'sucursales');
+        return database.prepare(`
+            SELECT sucursales.*, empresas.nombre AS empresa
+            FROM sucursales JOIN empresas ON empresas.id = sucursales.empresa_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
+            ORDER BY sucursales.id DESC
+        `).all(...scope.params);
+    }
+    const scope = tenantClause(empresaId, table);
     if (table === 'historial_estados') {
         return database.prepare(`
             SELECT historial_estados.*, usuarios.nombre AS usuario
             FROM historial_estados
             LEFT JOIN usuarios ON usuarios.id = historial_estados.usuario_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
             ORDER BY historial_estados.id DESC
-        `).all();
+        `).all(...scope.params);
+    }
+    if (table === 'actividad' || table === 'auditoria') {
+        return database.prepare(`
+            SELECT "${table}".*, usuarios.nombre AS usuario
+            FROM "${table}"
+            LEFT JOIN usuarios ON usuarios.id = "${table}".usuario_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
+            ORDER BY "${table}".id DESC
+        `).all(...scope.params);
     }
     if (table === 'permisos') {
         return database.prepare('SELECT * FROM permisos ORDER BY clave').all();
@@ -276,10 +450,12 @@ function list(table) {
                        usuarios.rol_id, usuarios.estado, usuarios.created_at,
                        roles.nombre AS rol
                 FROM usuarios LEFT JOIN roles ON roles.id = usuarios.rol_id
+                ${scope.sql ? `WHERE ${scope.sql}` : ''}
                 ORDER BY usuarios.id DESC
-            `).all();
+            `).all(...scope.params);
         }
-        return database.prepare(`SELECT * FROM "${table}" ORDER BY id DESC`).all();
+        return database.prepare(`SELECT * FROM "${table}" ${scope.sql ? `WHERE ${scope.sql}` : ''} ORDER BY id DESC`)
+            .all(...scope.params);
     }
     assertTable(table);
     if (table === 'cotizaciones') {
@@ -287,8 +463,9 @@ function list(table) {
             SELECT cotizaciones.*, clientes.nombre AS cliente_nombre
             FROM cotizaciones
             LEFT JOIN clientes ON clientes.id = cotizaciones.cliente_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
             ORDER BY cotizaciones.id DESC
-        `).all().map((row) => ({
+        `).all(...scope.params).map((row) => ({
             ...row,
             cliente: row.cliente_nombre || row.cliente
         }));
@@ -300,8 +477,9 @@ function list(table) {
             FROM transportes
             LEFT JOIN clientes ON clientes.id = transportes.cliente_id
             LEFT JOIN cotizaciones ON cotizaciones.id = transportes.cotizacion_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
             ORDER BY transportes.id DESC
-        `).all().map((row) => ({
+        `).all(...scope.params).map((row) => ({
             ...row,
             cliente: row.cliente_nombre || row.cliente
         }));
@@ -315,40 +493,81 @@ function list(table) {
             FROM contenedores
             LEFT JOIN clientes ON clientes.id = contenedores.cliente_id
             LEFT JOIN transportes ON transportes.id = contenedores.transporte_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
             ORDER BY contenedores.id DESC
-        `).all().map((row) => ({
+        `).all(...scope.params).map((row) => ({
             ...row,
             cliente: row.cliente_nombre || row.cliente
         }));
     }
-    return database.prepare(`SELECT * FROM "${table}" ORDER BY id DESC`).all();
+    if (table === 'facturas') {
+        return database.prepare(`
+            SELECT facturas.*, clientes.nombre AS cliente,
+                   transportes.origen, transportes.destino,
+                   contenedores.numero AS contenedor_numero
+            FROM facturas
+            JOIN clientes ON clientes.id = facturas.cliente_id
+            LEFT JOIN transportes ON transportes.id = facturas.transporte_id
+            LEFT JOIN contenedores ON contenedores.id = facturas.contenedor_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
+            ORDER BY facturas.id DESC
+        `).all(...scope.params);
+    }
+    return database.prepare(`SELECT * FROM "${table}" ${scope.sql ? `WHERE ${scope.sql}` : ''} ORDER BY id DESC`)
+        .all(...scope.params);
 }
 
-function create(table, payload) {
+function create(table, payload, usuarioId = 1, empresaId = defaultCompany.id) {
+    if (table === 'empresas') {
+        const name = String(payload.nombre || '').trim();
+        const identifier = String(payload.identificador || '').trim();
+        if (!name || !identifier) throw validationError('Empresa requiere nombre e identificador');
+        const result = database.prepare(
+            'INSERT INTO empresas (nombre, identificador, estado) VALUES (?, ?, ?)'
+        ).run(name, identifier, payload.estado || 'Activa');
+        recordAudit('Empresas', 'Crear', result.lastInsertRowid, `Empresa: ${name}`, usuarioId, empresaId);
+        return database.prepare('SELECT * FROM empresas WHERE id = ?').get(Number(result.lastInsertRowid));
+    }
+    if (table === 'sucursales') {
+        const name = String(payload.nombre || '').trim();
+        if (!name) throw validationError('Sucursal requiere nombre');
+        const targetCompany = Number(payload.empresa_id || empresaId);
+        if (targetCompany !== Number(empresaId)) throw validationError('No puede crear sucursales de otra empresa');
+        assertReference('empresas', targetCompany, 'empresa');
+        const result = database.prepare(
+            'INSERT INTO sucursales (empresa_id, nombre, direccion, estado) VALUES (?, ?, ?, ?)'
+        ).run(targetCompany, name, payload.direccion || '', payload.estado || 'Activa');
+        recordAudit('Sucursales', 'Crear', result.lastInsertRowid, `Sucursal: ${name}`, usuarioId, empresaId);
+        return database.prepare('SELECT * FROM sucursales WHERE id = ?').get(Number(result.lastInsertRowid));
+    }
     if (adminDefinitions[table]) {
         if (table === 'actividad' || table === 'auditoria') {
             throw validationError('Los registros de actividad y auditoría son de solo lectura');
         }
-        return createAdminRecord(table, payload);
+        return createAdminRecord(table, payload, usuarioId, empresaId);
     }
     assertTable(table);
     if (table === 'cotizaciones') {
-        return createQuotation(payload);
+        return createQuotation(payload, usuarioId, empresaId);
     }
 
     if (table === 'transportes') {
-        return createTransport(payload);
+        return createTransport(payload, usuarioId, empresaId);
     }
     if (table === 'contenedores') {
-        return createContainer(payload);
+        return createContainer(payload, usuarioId, empresaId);
+    }
+    if (table === 'facturas') {
+        return createInvoice(payload, usuarioId, empresaId);
     }
     const definition = definitions[table];
-    const normalizedPayload = payload.estado !== undefined
+    const normalizedPayload = payload.estado !== undefined && table !== 'facturas'
         ? { ...payload, estado: normalizeStatus(payload.estado) }
         : payload;
-    const values = definition.columns.map((column) => normalizedPayload[column] ?? '');
-    const columnsSql = definition.columns.map((column) => `"${column}"`).join(', ');
-    const valuesSql = definition.columns.map(() => '?').join(', ');
+    const insertColumns = [...definition.columns, 'empresa_id'];
+    const values = [...definition.columns.map((column) => normalizedPayload[column] ?? ''), empresaId];
+    const columnsSql = insertColumns.map((column) => `"${column}"`).join(', ');
+    const valuesSql = insertColumns.map(() => '?').join(', ');
     const result = database.prepare(
         `INSERT INTO "${table}" (${columnsSql}) VALUES (${valuesSql})`
     ).run(...values);
@@ -356,58 +575,121 @@ function create(table, payload) {
     const record = database
         .prepare(`SELECT * FROM "${table}" WHERE id = ?`)
         .get(Number(result.lastInsertRowid));
-    recordAudit(table, 'Crear', record.id, `${table} #${record.id}`);
+    recordAudit(table, 'Crear', record.id, `${table} #${record.id}`, usuarioId);
     return record;
 }
 
-function createAdminRecord(table, payload) {
+function createAdminRecord(table, payload, usuarioId = 1, empresaId = defaultCompany.id) {
     const definition = adminDefinitions[table];
+    const actorRole = database.prepare(`
+        SELECT roles.nombre AS rol
+        FROM usuarios JOIN roles ON roles.id = usuarios.rol_id
+        WHERE usuarios.id = ?
+    `).get(Number(usuarioId))?.rol;
+    const targetEmpresaId = Number(payload.empresa_id || empresaId);
+    if (targetEmpresaId !== Number(empresaId) && actorRole !== 'Administrador') {
+        throw validationError('Sólo un Administrador puede operar sobre otra empresa');
+    }
     if (table === 'usuarios') {
         const role = database.prepare('SELECT id FROM roles WHERE id = ?').get(Number(payload.rol_id));
         if (!role) throw validationError('Debe seleccionar un rol válido');
+        if (String(payload.password || '').length < 8) {
+            throw validationError('La contraseña debe tener al menos 8 caracteres');
+        }
+        const existingUser = database.prepare('SELECT id FROM usuarios WHERE lower(correo) = lower(?) AND empresa_id = ?')
+            .get(String(payload.correo || '').trim(), targetEmpresaId);
+        if (existingUser) throw validationError('Ya existe un usuario con ese correo');
     }
     if (table === 'configuracion') {
-        const existing = database.prepare('SELECT id FROM configuracion WHERE clave = ?').get(payload.clave);
+        const existing = database.prepare('SELECT id FROM configuracion WHERE clave = ? AND empresa_id = ?')
+            .get(payload.clave, targetEmpresaId);
         if (existing) {
             database.prepare('UPDATE configuracion SET valor = ?, descripcion = ? WHERE id = ?')
                 .run(payload.valor ?? '', payload.descripcion ?? '', existing.id);
-            recordAudit('Administración', 'Actualizar', existing.id, `configuracion: ${payload.clave}`);
+            recordAudit('Administración', 'Actualizar', existing.id, `configuracion: ${payload.clave}`, usuarioId);
             return database.prepare('SELECT * FROM configuracion WHERE id = ?').get(existing.id);
         }
     }
     const insertPayload = table === 'usuarios'
-        ? { ...payload, password_hash: hashPassword(payload.password || adminPassword) }
-        : payload;
+        ? { ...payload, password_hash: hashPassword(payload.password || adminPassword), empresa_id: targetEmpresaId }
+        : { ...payload, empresa_id: targetEmpresaId };
     const insertColumns = table === 'usuarios'
-        ? [...definition.columns, 'password_hash']
-        : definition.columns;
+        ? [...definition.columns, 'password_hash', 'empresa_id']
+        : [...definition.columns, 'empresa_id'];
     const result = insertRecord(table, insertColumns, insertPayload);
     const record = database.prepare(`SELECT * FROM "${table}" WHERE id = ?`).get(Number(result.lastInsertRowid));
     if (table !== 'actividad' && table !== 'auditoria') {
-        recordAudit('Administración', 'Crear', record.id, `${table}: ${record.nombre || record.clave || record.correo || ''}`);
+        recordAudit('Administración', 'Crear', record.id, `${table}: ${record.nombre || record.clave || record.correo || ''}`, usuarioId);
     }
-    return table === 'usuarios' ? list('usuarios').find((row) => row.id === record.id) : record;
+    return table === 'usuarios' ? list('usuarios', targetEmpresaId).find((row) => row.id === record.id) : record;
 }
 
-function update(table, id, payload) {
+function update(table, id, payload, usuarioId = 1, empresaId = defaultCompany.id) {
+    if (saasTables.includes(table)) {
+        const recordId = Number(id);
+        if (table === 'sucursales') assertTenantRecord(table, recordId, empresaId);
+        if (table === 'empresas' && Number(id) !== Number(empresaId)) {
+            throw notFoundError();
+        }
+        const columns = table === 'empresas'
+            ? ['nombre', 'identificador', 'estado']
+            : ['nombre', 'direccion', 'estado'];
+        const editable = columns.filter((column) => payload[column] !== undefined);
+        if (!editable.length) throw validationError('No hay campos válidos para actualizar');
+        database.prepare(`UPDATE ${table} SET ${editable.map((column) => `"${column}" = ?`).join(', ')} WHERE id = ?`)
+            .run(...editable.map((column) => payload[column]), recordId);
+        recordAudit(table, 'Actualizar', recordId, `Registro #${recordId}`, usuarioId, empresaId);
+        return database.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(recordId);
+    }
     if (adminDefinitions[table]) {
         if (table === 'actividad' || table === 'auditoria') {
             throw validationError('Los registros de actividad y auditoría son de solo lectura');
         }
-        return updateAdminRecord(table, id, payload);
+        return updateAdminRecord(table, id, payload, usuarioId, empresaId);
     }
     assertTable(table);
     const recordId = Number(id);
+    assertTenantRecord(table, recordId, empresaId);
     const current = database.prepare(`SELECT * FROM "${table}" WHERE id = ?`).get(recordId);
     if (!current) throw notFoundError();
 
+    if (table === 'facturas' && payload.estado !== undefined) {
+        return updateInvoiceStatus(recordId, payload.estado, usuarioId);
+    }
+    if (table === 'facturas') assertTenantRecord('facturas', recordId, empresaId);
+    if (table === 'facturas') {
+        if (payload.numero !== undefined) {
+            const number = String(payload.numero || '').trim();
+            if (!number) throw validationError('Debe indicar el número de factura');
+            const duplicate = database.prepare(
+                'SELECT id FROM facturas WHERE numero = ? AND id != ?'
+            ).get(number, recordId);
+            if (duplicate) throw validationError('Ya existe una factura con ese número');
+            payload = { ...payload, numero: number };
+        }
+        if (payload.fecha_emision !== undefined) {
+            payload = {
+                ...payload,
+                fecha_emision: validateInvoiceDate(payload.fecha_emision, 'La fecha de emisión', true)
+            };
+        }
+        if (payload.fecha_pago !== undefined) {
+            payload = {
+                ...payload,
+                fecha_pago: validateInvoiceDate(payload.fecha_pago, 'La fecha de pago')
+            };
+        }
+    }
+
     if (table === 'cotizaciones' && payload.cliente_id !== undefined) {
         assertReference('clientes', payload.cliente_id, 'cliente');
+        assertTenantRecord('clientes', payload.cliente_id, empresaId);
     }
     if (table === 'transportes' && payload.cotizacion_id !== undefined) {
         const quotation = database.prepare('SELECT cliente_id FROM cotizaciones WHERE id = ?')
             .get(Number(payload.cotizacion_id));
         if (!quotation) throw validationError('Debe seleccionar una cotización válida');
+        assertTenantRecord('cotizaciones', payload.cotizacion_id, empresaId);
         payload = { ...payload, cliente_id: quotation.cliente_id };
     }
     if (table === 'transportes' && payload.cliente_id !== undefined
@@ -424,12 +706,14 @@ function update(table, id, payload) {
         if (payload.transporte_id !== '' && !transport) {
             throw validationError('Debe seleccionar un transporte válido');
         }
+        if (payload.transporte_id !== '') assertTenantRecord('transportes', payload.transporte_id, empresaId);
         payload = transport
             ? { ...payload, cliente_id: transport.cliente_id }
             : payload;
     }
     if (table === 'contenedores' && payload.cliente_id !== undefined) {
         assertReference('clientes', payload.cliente_id, 'cliente');
+        assertTenantRecord('clientes', payload.cliente_id, empresaId);
         if (current.transporte_id && Number(payload.cliente_id) !== current.cliente_id) {
             throw validationError('El cliente no coincide con el transporte asociado');
         }
@@ -444,30 +728,36 @@ function update(table, id, payload) {
     const setSql = columns.map((column) => `"${column}" = ?`).join(', ');
     database.prepare(`UPDATE "${table}" SET ${setSql} WHERE id = ?`)
         .run(...columns.map((column) => payload[column]), recordId);
-    const updated = list(table).find((row) => row.id === recordId);
+    const updated = list(table, empresaId).find((row) => row.id === recordId);
     if (payload.estado !== undefined && payload.estado !== current.estado) {
-        recordStatusHistory(table, recordId, current.estado, payload.estado);
+        recordStatusHistory(table, recordId, current.estado, payload.estado, usuarioId);
     }
-    recordAudit(table, 'Actualizar', recordId, `Registro #${recordId}`);
+    recordAudit(table, 'Actualizar', recordId, `Registro #${recordId}`, usuarioId);
     return updated;
 }
 
-function remove(table, id) {
+function remove(table, id, usuarioId = 1, empresaId = defaultCompany.id) {
+    if (saasTables.includes(table)) {
+        if (table === 'sucursales') assertTenantRecord(table, id, empresaId);
+        if (table === 'empresas' && Number(id) !== Number(empresaId)) throw notFoundError();
+    }
     if (table === 'actividad' || table === 'auditoria') {
         throw validationError('Los registros de actividad y auditoría son de solo lectura');
     }
     if (adminDefinitions[table]) assertAdminTable(table);
-    else assertTable(table);
+    else if (!saasTables.includes(table)) assertTable(table);
     const recordId = Number(id);
+    assertTenantRecord(table, recordId, empresaId);
     const result = database.prepare(`DELETE FROM "${table}" WHERE id = ?`).run(recordId);
     if (!result.changes) throw notFoundError();
-    recordAudit(table, 'Eliminar', recordId, `Registro #${recordId}`);
+    recordAudit(table, 'Eliminar', recordId, `Registro #${recordId}`, usuarioId);
     return { id: recordId, deleted: true };
 }
 
-function updateAdminRecord(table, id, payload) {
+function updateAdminRecord(table, id, payload, usuarioId = 1, empresaId = defaultCompany.id) {
     assertAdminTable(table);
     const recordId = Number(id);
+    assertTenantRecord(table, recordId, empresaId);
     const current = database.prepare(`SELECT * FROM "${table}" WHERE id = ?`).get(recordId);
     if (!current) throw notFoundError();
     if (table === 'usuarios' && payload.rol_id !== undefined) {
@@ -485,7 +775,7 @@ function updateAdminRecord(table, id, payload) {
     database.prepare(`UPDATE "${table}" SET ${setSql} WHERE id = ?`)
         .run(...columns.map((column) => updatePayload[column]), recordId);
     const updated = list(table).find((row) => row.id === recordId);
-    recordAudit('Administración', 'Actualizar', recordId, `${table} #${recordId}`);
+    recordAudit('Administración', 'Actualizar', recordId, `${table} #${recordId}`, usuarioId);
     return updated;
 }
 
@@ -493,7 +783,8 @@ function editableColumns(table) {
     const relationColumns = {
         cotizaciones: ['cliente_id', 'telefono', 'origen', 'destino', 'servicio', 'importe', 'estado', 'observaciones'],
         transportes: ['cliente_id', 'cotizacion_id', 'origen', 'destino', 'tipo', 'estado'],
-        contenedores: ['cliente_id', 'transporte_id', 'numero', 'tipo', 'puerto', 'estado']
+        contenedores: ['cliente_id', 'transporte_id', 'numero', 'tipo', 'puerto', 'estado'],
+        facturas: ['numero', 'importe', 'estado', 'fecha_emision', 'fecha_pago', 'observaciones']
     };
     return relationColumns[table] || definitions[table].columns;
 }
@@ -514,16 +805,21 @@ function notFoundError() {
     return error;
 }
 
-function recordAudit(modulo, accion, registroId, detalles) {
+function recordAudit(modulo, accion, registroId, detalles, usuarioId = 1, empresaId = defaultCompany.id) {
+    if (usuarioId) {
+        const user = database.prepare('SELECT empresa_id FROM usuarios WHERE id = ?').get(Number(usuarioId));
+        if (user?.empresa_id) empresaId = user.empresa_id;
+    }
     insertRecord('auditoria', ['usuario_id', 'modulo', 'accion', 'registro_id', 'detalles'], {
-        usuario_id: 1, modulo, accion, registro_id: registroId, detalles
+        usuario_id: usuarioId, modulo, accion, registro_id: registroId, detalles, empresa_id: empresaId
     });
     insertRecord('actividad', ['usuario_id', 'modulo', 'accion', 'descripcion'], {
-        usuario_id: 1, modulo, accion, descripcion: detalles
+        usuario_id: usuarioId, modulo, accion, descripcion: detalles, empresa_id: empresaId
     });
 }
 
-function createQuotation(payload) {
+function createQuotation(payload, usuarioId = 1, empresaId = defaultCompany.id) {
+    assertTenantRecord('clientes', payload.cliente_id, empresaId);
     const client = database.prepare('SELECT id FROM clientes WHERE id = ?').get(Number(payload.cliente_id));
     if (!client) {
         throw validationError('Debe seleccionar un cliente válido');
@@ -540,13 +836,15 @@ function createQuotation(payload) {
         ...payload,
         estado: initialStatus
     });
-    const record = list('cotizaciones').find((row) => row.id === Number(result.lastInsertRowid));
-    recordStatusHistory('cotizaciones', record.id, null, record.estado);
-    recordAudit('cotizaciones', 'Crear', record.id, `cotizaciones #${record.id}`);
+    database.prepare('UPDATE cotizaciones SET empresa_id = ? WHERE id = ?').run(empresaId, Number(result.lastInsertRowid));
+    const record = list('cotizaciones', empresaId).find((row) => row.id === Number(result.lastInsertRowid));
+    recordStatusHistory('cotizaciones', record.id, null, record.estado, usuarioId);
+    recordAudit('cotizaciones', 'Crear', record.id, `cotizaciones #${record.id}`, usuarioId);
     return record;
 }
 
-function createTransport(payload) {
+function createTransport(payload, usuarioId = 1, empresaId = defaultCompany.id) {
+    assertTenantRecord('cotizaciones', payload.cotizacion_id, empresaId);
     const quotation = database.prepare(`
         SELECT id, cliente_id, origen, destino, servicio, estado
         FROM cotizaciones WHERE id = ?
@@ -570,15 +868,18 @@ function createTransport(payload) {
         estado: normalizeStatus(payload.estado)
     };
     const result = insertRecord('transportes', columns, transport);
-    const record = list('transportes').find((row) => row.id === Number(result.lastInsertRowid));
-    recordStatusHistory('transportes', record.id, null, record.estado);
-    recordAudit('transportes', 'Crear', record.id, `transportes #${record.id}`);
+    database.prepare('UPDATE transportes SET empresa_id = ? WHERE id = ?').run(empresaId, Number(result.lastInsertRowid));
+    const record = list('transportes', empresaId).find((row) => row.id === Number(result.lastInsertRowid));
+    recordStatusHistory('transportes', record.id, null, record.estado, usuarioId);
+    recordAudit('transportes', 'Crear', record.id, `transportes #${record.id}`, usuarioId);
     return record;
 }
 
 const workflowStatuses = ['Pendiente', 'Aprobado', 'En Proceso', 'Finalizado'];
 
-function createContainer(payload) {
+function createContainer(payload, usuarioId = 1, empresaId = defaultCompany.id) {
+    if (payload.transporte_id) assertTenantRecord('transportes', payload.transporte_id, empresaId);
+    assertTenantRecord('clientes', payload.cliente_id, empresaId);
     let transport = null;
     if (payload.transporte_id !== undefined && payload.transporte_id !== '') {
         transport = database.prepare(
@@ -609,14 +910,158 @@ function createContainer(payload) {
         estado: normalizeStatus(payload.estado)
     };
     const result = insertRecord('contenedores', columns, container);
-    const record = list('contenedores').find((row) => row.id === Number(result.lastInsertRowid));
-    recordStatusHistory('contenedores', record.id, null, record.estado);
-    recordAudit('contenedores', 'Crear', record.id, `contenedores #${record.id}`);
+    database.prepare('UPDATE contenedores SET empresa_id = ? WHERE id = ?').run(empresaId, Number(result.lastInsertRowid));
+    const record = list('contenedores', empresaId).find((row) => row.id === Number(result.lastInsertRowid));
+    recordStatusHistory('contenedores', record.id, null, record.estado, usuarioId);
+    recordAudit('contenedores', 'Crear', record.id, `contenedores #${record.id}`, usuarioId);
     return record;
 }
 
-function updateStatus(table, id, status) {
+const invoiceStatuses = ['Pendiente', 'Pagada', 'Vencida'];
+
+database.prepare("UPDATE facturas SET estado = 'Vencida' WHERE estado = 'Anulada'").run();
+
+function normalizeInvoiceStatus(status) {
+    const input = String(status || 'Pendiente').trim().toLowerCase();
+    const value = invoiceStatuses.find((item) => item.toLowerCase() === input);
+    if (!value) throw validationError(`Estado de factura inválido. Use: ${invoiceStatuses.join(', ')}`);
+    return value;
+}
+
+function validateInvoiceDate(value, label, required = false) {
+    const date = String(value || '').trim();
+    if (!date && !required) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw validationError(`${label} inválida`);
+    }
+    return date;
+}
+
+function createInvoice(payload, usuarioId = 1, empresaId = defaultCompany.id) {
+    assertTenantRecord('contenedores', payload.contenedor_id, empresaId);
+    const container = database.prepare(`
+        SELECT contenedores.id, contenedores.cliente_id, contenedores.transporte_id,
+               transportes.estado AS transporte_estado,
+               cotizaciones.importe AS cotizacion_importe
+        FROM contenedores
+        LEFT JOIN transportes ON transportes.id = contenedores.transporte_id
+        LEFT JOIN cotizaciones ON cotizaciones.id = transportes.cotizacion_id
+        WHERE contenedores.id = ?
+    `).get(Number(payload.contenedor_id));
+    if (!container || !container.transporte_id) {
+        throw validationError('Debe seleccionar un contenedor asociado a un transporte');
+    }
+    if (!['En Proceso', 'Finalizado'].includes(container.transporte_estado)) {
+        throw validationError('El transporte debe estar En Proceso antes de facturar');
+    }
+    const existing = database.prepare('SELECT id FROM facturas WHERE contenedor_id = ?').get(container.id);
+    if (existing) throw validationError('El contenedor ya tiene una factura');
+    const invoiceNumber = String(payload.numero || '').trim();
+    if (!invoiceNumber) throw validationError('Debe indicar el número de factura');
+    const duplicateNumber = database.prepare('SELECT id FROM facturas WHERE numero = ?').get(invoiceNumber);
+    if (duplicateNumber) throw validationError('Ya existe una factura con ese número');
+    const invoice = {
+        ...payload,
+        cliente_id: container.cliente_id,
+        transporte_id: container.transporte_id,
+        numero: invoiceNumber,
+        importe: payload.importe || container.cotizacion_importe || 0,
+        estado: normalizeInvoiceStatus(payload.estado),
+        fecha_emision: validateInvoiceDate(
+            payload.fecha_emision || new Date().toISOString().slice(0, 10),
+            'La fecha de emisión',
+            true
+        )
+    };
+    if (invoice.estado !== 'Pendiente') {
+        throw validationError('Una factura nueva debe comenzar en estado Pendiente');
+    }
+    const columns = ['cliente_id', 'transporte_id', 'contenedor_id', 'numero', 'importe',
+        'estado', 'fecha_emision', 'fecha_pago', 'observaciones'];
+    const result = insertRecord('facturas', columns, invoice);
+    database.prepare('UPDATE facturas SET empresa_id = ? WHERE id = ?').run(empresaId, Number(result.lastInsertRowid));
+    const record = list('facturas', empresaId).find((row) => row.id === Number(result.lastInsertRowid));
+    recordStatusHistory('facturas', record.id, null, record.estado, usuarioId);
+    recordAudit('facturas', 'Crear', record.id, `Factura ${record.numero || `#${record.id}`}`, usuarioId);
+    return record;
+}
+
+function updateInvoiceStatus(id, status, usuarioId = 1, empresaId = defaultCompany.id) {
+    const next = normalizeInvoiceStatus(status);
+    assertTenantRecord('facturas', id, empresaId);
+    const current = database.prepare('SELECT * FROM facturas WHERE id = ?').get(Number(id));
+    if (!current) throw notFoundError();
+    if (current.estado === next) return list('facturas').find((row) => row.id === Number(id));
+    if (current.estado === 'Pagada' || (current.estado === 'Vencida' && next === 'Vencida')
+        || (current.estado !== 'Pendiente' && !(current.estado === 'Vencida' && next === 'Pagada'))) {
+        throw validationError('La factura sólo puede pasar de Pendiente a Pagada o Vencida, o de Vencida a Pagada');
+    }
+    const fechaPago = next === 'Pagada' ? new Date().toISOString().slice(0, 10) : null;
+    database.prepare('UPDATE facturas SET estado = ?, fecha_pago = ? WHERE id = ?')
+        .run(next, fechaPago, Number(id));
+    recordStatusHistory('facturas', Number(id), current.estado, next, usuarioId);
+    recordAudit('facturas', 'Actualizar estado', Number(id), `Factura: ${next}`, usuarioId);
+    if (next === 'Pagada') finalizeService(current, usuarioId);
+    return list('facturas').find((row) => row.id === Number(id));
+}
+
+function finalizeService(invoice, usuarioId) {
+    const transport = database.prepare('SELECT * FROM transportes WHERE id = ?').get(invoice.transporte_id);
+    const container = database.prepare('SELECT * FROM contenedores WHERE id = ?').get(invoice.contenedor_id);
+    if (transport && transport.estado !== 'Finalizado') {
+        database.prepare("UPDATE transportes SET estado = 'Finalizado' WHERE id = ?").run(transport.id);
+        recordStatusHistory('transportes', transport.id, transport.estado, 'Finalizado', usuarioId);
+        recordAudit('transportes', 'Servicio finalizado', transport.id, `Factura #${invoice.id}`, usuarioId);
+    }
+    if (container && container.estado !== 'Finalizado') {
+        database.prepare("UPDATE contenedores SET estado = 'Finalizado' WHERE id = ?").run(container.id);
+        recordStatusHistory('contenedores', container.id, container.estado, 'Finalizado', usuarioId);
+        recordAudit('contenedores', 'Servicio finalizado', container.id, `Factura #${invoice.id}`, usuarioId);
+    }
+}
+
+function traceability(type, id, empresaId = null) {
+    let transportId = Number(id);
+    if (type === 'contenedores') {
+        const container = database.prepare('SELECT transporte_id FROM contenedores WHERE id = ?').get(transportId);
+        if (!container) throw notFoundError();
+        transportId = container.transporte_id;
+    }
+    assertTenantRecord('transportes', transportId, empresaId);
+    const transport = database.prepare(`
+        SELECT transportes.*, clientes.nombre AS cliente,
+               cotizaciones.id AS cotizacion_id, cotizaciones.estado AS cotizacion_estado
+        FROM transportes
+        JOIN clientes ON clientes.id = transportes.cliente_id
+        LEFT JOIN cotizaciones ON cotizaciones.id = transportes.cotizacion_id
+        WHERE transportes.id = ?
+    `).get(transportId);
+    if (!transport) throw notFoundError();
+    return {
+        cliente: database.prepare('SELECT * FROM clientes WHERE id = ?').get(transport.cliente_id),
+        cotizacion: transport.cotizacion_id
+            ? database.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(transport.cotizacion_id) : null,
+        transporte: transport,
+        contenedores: database.prepare('SELECT * FROM contenedores WHERE transporte_id = ? ORDER BY id').all(transportId),
+        facturas: database.prepare('SELECT * FROM facturas WHERE transporte_id = ? ORDER BY id').all(transportId),
+        historial: database.prepare(`
+            SELECT historial_estados.*, usuarios.nombre AS usuario
+            FROM historial_estados
+            LEFT JOIN usuarios ON usuarios.id = historial_estados.usuario_id
+            WHERE (modulo = 'transportes' AND registro_id = ?)
+               OR (modulo = 'contenedores' AND registro_id IN
+                   (SELECT id FROM contenedores WHERE transporte_id = ?))
+               OR (modulo = 'facturas' AND registro_id IN
+                   (SELECT id FROM facturas WHERE transporte_id = ?))
+            ORDER BY historial_estados.created_at ASC, historial_estados.id ASC
+        `).all(transportId, transportId, transportId)
+    };
+}
+
+function updateStatus(table, id, status, usuarioId = 1, empresaId = defaultCompany.id) {
+    if (table === 'facturas') return updateInvoiceStatus(id, status, usuarioId, empresaId);
     assertTable(table);
+    assertTenantRecord(table, id, empresaId);
     const normalized = normalizeStatus(status);
     const current = database.prepare(`SELECT * FROM "${table}" WHERE id = ?`).get(Number(id));
     if (!current) {
@@ -633,9 +1078,9 @@ function updateStatus(table, id, status) {
     }
     const record = list(table).find((row) => row.id === Number(id));
     if (current.estado !== normalized) {
-        recordStatusHistory(table, record.id, current.estado, normalized);
+        recordStatusHistory(table, record.id, current.estado, normalized, usuarioId);
     }
-    recordAudit(table, 'Actualizar estado', record.id, `Estado: ${normalized}`);
+    recordAudit(table, 'Actualizar estado', record.id, `Estado: ${normalized}`, usuarioId);
     return record;
 }
 
@@ -677,12 +1122,13 @@ function insertRecord(table, columns, payload) {
     ).run(...columns.map((column) => payload[column] ?? ''));
 }
 
-function recordStatusHistory(modulo, registroId, estadoAnterior, estadoNuevo) {
+function recordStatusHistory(modulo, registroId, estadoAnterior, estadoNuevo, usuarioId = 1) {
+    const user = database.prepare('SELECT empresa_id FROM usuarios WHERE id = ?').get(Number(usuarioId));
     database.prepare(`
         INSERT INTO historial_estados
-            (modulo, registro_id, estado_anterior, estado_nuevo, usuario_id)
-        VALUES (?, ?, ?, ?, ?)
-    `).run(modulo, registroId, estadoAnterior, estadoNuevo, 1);
+            (modulo, registro_id, estado_anterior, estado_nuevo, usuario_id, empresa_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).run(modulo, registroId, estadoAnterior, estadoNuevo, usuarioId, user?.empresa_id || defaultCompany.id);
 }
 
 function validationError(message) {
@@ -706,8 +1152,10 @@ function verifyPassword(password, storedHash) {
 
 function authenticate(email, password) {
     const user = database.prepare(`
-        SELECT usuarios.*, roles.nombre AS rol
+        SELECT usuarios.*, roles.nombre AS rol, empresas.nombre AS empresa,
+               empresas.identificador AS empresa_identificador
         FROM usuarios LEFT JOIN roles ON roles.id = usuarios.rol_id
+        JOIN empresas ON empresas.id = usuarios.empresa_id
         WHERE lower(usuarios.correo) = lower(?) AND usuarios.estado = 'Activo'
     `).get(String(email || '').trim());
     if (!user || !verifyPassword(password, user.password_hash)) return null;
@@ -716,10 +1164,21 @@ function authenticate(email, password) {
     const expires = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
     database.prepare('INSERT INTO sesiones (usuario_id, token_hash, expires_at) VALUES (?, ?, ?)')
         .run(user.id, tokenHash, expires);
-    recordAudit('Autenticación', 'Login', user.id, `Inicio de sesión: ${user.correo}`);
+    recordAudit('Autenticación', 'Login', user.id, `Inicio de sesión: ${user.correo}`, user.id, user.empresa_id);
+    const permissions = database.prepare(`
+        SELECT permisos.clave
+        FROM rol_permisos
+        JOIN permisos ON permisos.id = rol_permisos.permiso_id
+        WHERE rol_permisos.rol_id = ?
+        ORDER BY permisos.clave
+    `).all(user.rol_id).map((permission) => permission.clave);
     return {
         token,
-        user: { id: user.id, nombre: user.nombre, correo: user.correo, rol: user.rol }
+        user: {
+            id: user.id, nombre: user.nombre, correo: user.correo, rol: user.rol,
+            empresa_id: user.empresa_id, empresa: user.empresa,
+            empresa_identificador: user.empresa_identificador, permissions
+        }
     };
 }
 
@@ -727,14 +1186,25 @@ function sessionUser(token) {
     if (!token) return null;
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const session = database.prepare(`
-        SELECT usuarios.id, usuarios.nombre, usuarios.correo, roles.nombre AS rol
+        SELECT usuarios.id, usuarios.nombre, usuarios.correo, usuarios.empresa_id,
+               empresas.nombre AS empresa, empresas.identificador AS empresa_identificador,
+               roles.id AS rol_id, roles.nombre AS rol
         FROM sesiones
         JOIN usuarios ON usuarios.id = sesiones.usuario_id
+        JOIN empresas ON empresas.id = usuarios.empresa_id
         LEFT JOIN roles ON roles.id = usuarios.rol_id
         WHERE sesiones.token_hash = ? AND sesiones.expires_at > ?
               AND usuarios.estado = 'Activo'
     `).get(tokenHash, new Date().toISOString());
-    return session || null;
+    if (!session) return null;
+    session.permissions = database.prepare(`
+        SELECT permisos.clave
+        FROM rol_permisos
+        JOIN permisos ON permisos.id = rol_permisos.permiso_id
+        WHERE rol_permisos.rol_id = ?
+        ORDER BY permisos.clave
+    `).all(session.rol_id).map((permission) => permission.clave);
+    return session;
 }
 
 function revokeSession(token) {
@@ -743,7 +1213,7 @@ function revokeSession(token) {
     database.prepare('DELETE FROM sesiones WHERE token_hash = ?').run(tokenHash);
 }
 
-function setRolePermissions(roleId, permissionKeys) {
+function setRolePermissions(roleId, permissionKeys, usuarioId = 1) {
     assertReference('roles', roleId, 'rol');
     const keys = Array.isArray(permissionKeys) ? permissionKeys : [];
     const permissions = keys.map((key) =>
@@ -755,103 +1225,403 @@ function setRolePermissions(roleId, permissionKeys) {
     database.prepare('DELETE FROM rol_permisos WHERE rol_id = ?').run(Number(roleId));
     const insert = database.prepare('INSERT INTO rol_permisos (rol_id, permiso_id) VALUES (?, ?)');
     permissions.forEach((permission) => insert.run(Number(roleId), permission.id));
-    recordAudit('Administración', 'Actualizar permisos', Number(roleId), `Permisos asignados: ${keys.join(', ')}`);
+    recordAudit('Administración', 'Actualizar permisos', Number(roleId), `Permisos asignados: ${keys.join(', ')}`, usuarioId);
     return list('rol_permisos').filter((item) => item.rol_id === Number(roleId));
 }
 
-function dashboardData() {
-    const tables = Object.keys(definitions);
-    const counts = Object.fromEntries(
-        tables.map((table) => [
-            table,
-            database.prepare(`SELECT COUNT(*) AS count FROM "${table}"`).get().count
-        ])
-    );
+function dashboardData(filters = {}, empresaId = null) {
+    const { from, to } = reportFilters(filters);
+    const reports = reportData(filters, empresaId);
+    const dateCondition = (column = 'created_at') => {
+        const clauses = [];
+        const params = [];
+        if (from) {
+            clauses.push(`date(${column}) >= date(?)`);
+            params.push(from);
+        }
+        if (to) {
+            clauses.push(`date(${column}) <= date(?)`);
+            params.push(to);
+        }
+        if (empresaId) {
+            const tenantColumn = column.includes('.')
+                ? `${column.split('.')[0]}.empresa_id`
+                : 'empresa_id';
+            clauses.push(`${tenantColumn} = ?`);
+            params.push(Number(empresaId));
+        }
+        return { sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
+    };
+    const counts = {
+        clientes: reports.clientes.total,
+        cotizaciones: reports.cotizaciones.total,
+        transportes: reports.transportes.total,
+        contenedores: reports.contenedores.total,
+        mensajes: reports.mensajes.total,
+        facturas: reports.facturas.total,
+        usuarios: database.prepare(`
+            SELECT COUNT(*) AS count FROM usuarios
+            ${dateCondition().sql}
+        `).get(...dateCondition().params).count
+    };
+    const quoteDates = dateCondition('created_at');
+    const transportDates = dateCondition('created_at');
     const activity = database.prepare(`
         SELECT * FROM (
             SELECT 'Clientes' AS module, 'Nuevo cliente registrado' AS action,
                    nombre AS subject, created_at
-            FROM clientes
+            FROM clientes ${dateCondition().sql}
             UNION ALL
             SELECT 'Cotizaciones', 'Nueva cotización registrada',
                    cliente, created_at
-            FROM cotizaciones
+            FROM cotizaciones ${dateCondition().sql}
             UNION ALL
             SELECT 'Transportes', 'Nuevo transporte registrado',
                    cliente, created_at
-            FROM transportes
+            FROM transportes ${dateCondition().sql}
             UNION ALL
             SELECT 'Contenedores', 'Nuevo contenedor registrado',
                    COALESCE(numero, cliente), created_at
-            FROM contenedores
+            FROM contenedores ${dateCondition().sql}
             UNION ALL
             SELECT 'Mensajes', 'Nuevo mensaje recibido',
                    cliente, created_at
-            FROM mensajes
+            FROM mensajes ${dateCondition().sql}
+            UNION ALL
+            SELECT 'Facturas', 'Nueva factura registrada',
+                   numero, created_at
+            FROM facturas ${dateCondition().sql}
+            UNION ALL
+            SELECT 'Usuarios', 'Nuevo usuario registrado',
+                   nombre, created_at
+            FROM usuarios ${dateCondition().sql}
         )
         ORDER BY datetime(created_at) DESC
         LIMIT 10
-    `).all();
+    `).all(
+        ...dateCondition().params, ...dateCondition().params,
+        ...dateCondition().params, ...dateCondition().params,
+        ...dateCondition().params, ...dateCondition().params,
+        ...dateCondition().params
+    );
     const recentRecords = database.prepare(`
         SELECT * FROM (
-            SELECT 'Clientes' AS module, id, nombre AS subject, created_at FROM clientes
+            SELECT 'Clientes' AS module, id, nombre AS subject, created_at FROM clientes ${dateCondition().sql}
             UNION ALL
-            SELECT 'Cotizaciones', id, cliente, created_at FROM cotizaciones
+            SELECT 'Cotizaciones', id, cliente, created_at FROM cotizaciones ${dateCondition().sql}
             UNION ALL
-            SELECT 'Transportes', id, cliente, created_at FROM transportes
+            SELECT 'Transportes', id, cliente, created_at FROM transportes ${dateCondition().sql}
             UNION ALL
-            SELECT 'Contenedores', id, COALESCE(numero, cliente), created_at FROM contenedores
+            SELECT 'Contenedores', id, COALESCE(numero, cliente), created_at FROM contenedores ${dateCondition().sql}
             UNION ALL
-            SELECT 'Mensajes', id, cliente, created_at FROM mensajes
+            SELECT 'Mensajes', id, cliente, created_at FROM mensajes ${dateCondition().sql}
+            UNION ALL
+            SELECT 'Facturas', id, numero, created_at FROM facturas ${dateCondition().sql}
+            UNION ALL
+            SELECT 'Usuarios', id, nombre, created_at FROM usuarios ${dateCondition().sql}
         )
         ORDER BY datetime(created_at) DESC, id DESC
         LIMIT 10
-    `).all();
+    `).all(
+        ...dateCondition().params, ...dateCondition().params,
+        ...dateCondition().params, ...dateCondition().params,
+        ...dateCondition().params, ...dateCondition().params,
+        ...dateCondition().params
+    );
+    const executive = database.prepare(`
+        SELECT
+            (SELECT COUNT(*) FROM cotizaciones ${quoteDates.sql ? `${quoteDates.sql} AND` : 'WHERE'} estado = 'Pendiente') AS pendingQuotes,
+            (SELECT COUNT(*) FROM transportes ${transportDates.sql ? `${transportDates.sql} AND` : 'WHERE'} estado = 'En Proceso') AS transportsInProcess,
+            (SELECT COUNT(*) FROM transportes ${transportDates.sql ? `${transportDates.sql} AND` : 'WHERE'} estado = 'Finalizado') AS finishedServices
+    `).get(...quoteDates.params, ...transportDates.params, ...transportDates.params);
+    const totalQuotations = reports.cotizaciones.total;
+    const approvedQuotes = reports.cotizaciones.byStatus
+        .filter((item) => ['Aprobada', 'Aprobado', 'Aceptada', 'Aceptado'].includes(item.label))
+        .reduce((sum, item) => sum + item.value, 0);
+    const countStatus = (items, labels) => items
+        .filter((item) => labels.includes(item.label))
+        .reduce((sum, item) => sum + Number(item.value || 0), 0);
+    const kpis = {
+        totalClients: counts.clientes,
+        totalQuotes: counts.cotizaciones,
+        pendingQuotes: countStatus(reports.cotizaciones.byStatus, ['Pendiente']),
+        approvedQuotes,
+        totalTransports: counts.transportes,
+        transportsInProcess: countStatus(reports.transportes.byStatus, ['En Proceso']),
+        transportsFinished: countStatus(reports.transportes.byStatus, ['Finalizado']),
+        totalContainers: counts.contenedores,
+        activeContainers: reports.contenedores.byStatus
+            .filter((item) => !['Finalizado', 'Entregado'].includes(item.label))
+            .reduce((sum, item) => sum + Number(item.value || 0), 0),
+        totalMessages: counts.mensajes,
+        totalUsers: counts.usuarios
+    };
+    const billingDates = dateCondition('fecha_emision');
+    const billingByMonth = database.prepare(`
+        SELECT strftime('%Y-%m', fecha_emision) AS label,
+               COUNT(*) AS invoices,
+               COALESCE(SUM(CAST(importe AS REAL)), 0) AS value
+        FROM facturas
+        ${billingDates.sql}
+        GROUP BY label
+        ORDER BY label
+    `).all(...billingDates.params);
+    const billingByYear = database.prepare(`
+        SELECT strftime('%Y', fecha_emision) AS label,
+               COUNT(*) AS invoices,
+               COALESCE(SUM(CAST(importe AS REAL)), 0) AS value
+        FROM facturas
+        ${billingDates.sql}
+        GROUP BY label
+        ORDER BY label
+    `).all(...billingDates.params);
+    const clientDates = dateCondition('cotizaciones.created_at');
+    const topClients = database.prepare(`
+        SELECT clientes.id, clientes.nombre AS label,
+               COUNT(cotizaciones.id) AS quotations,
+               COALESCE(SUM(CAST(cotizaciones.importe AS REAL)), 0) AS quotedValue
+        FROM clientes
+        LEFT JOIN cotizaciones ON cotizaciones.cliente_id = clientes.id
+            AND cotizaciones.empresa_id = clientes.empresa_id
+        ${clientDates.sql}
+        GROUP BY clientes.id, clientes.nombre
+        HAVING quotations > 0
+        ORDER BY quotedValue DESC, quotations DESC, clientes.nombre
+        LIMIT 5
+    `).all(...clientDates.params);
+    const clientActivity = new Map(
+        database.prepare(`
+            SELECT clientes.id, clientes.nombre AS label, COUNT(cotizaciones.id) AS quotations
+            FROM clientes LEFT JOIN cotizaciones
+              ON cotizaciones.cliente_id = clientes.id
+             AND cotizaciones.empresa_id = clientes.empresa_id
+             ${clientDates.sql.replace(/^WHERE /, 'AND ')}
+            ${tenantClause(empresaId, 'clientes').sql ? `WHERE ${tenantClause(empresaId, 'clientes').sql}` : ''}
+            GROUP BY clientes.id, clientes.nombre
+        `).all(...clientDates.params, ...tenantClause(empresaId, 'clientes').params)
+            .map((item) => [item.id, { id: item.id, label: item.label, quotations: Number(item.quotations) }])
+    );
+    const transportActivityDates = dateCondition('created_at');
+    database.prepare(`
+        SELECT cliente_id, COUNT(*) AS transports
+        FROM transportes ${transportActivityDates.sql}
+        GROUP BY cliente_id
+    `).all(...transportActivityDates.params).forEach((item) => {
+        const client = clientActivity.get(item.cliente_id) || { id: item.cliente_id, label: `Cliente #${item.cliente_id}`, quotations: 0 };
+        client.transports = Number(item.transports);
+        clientActivity.set(item.cliente_id, client);
+    });
+    const messageActivityDates = dateCondition('created_at');
+    database.prepare(`
+        SELECT cliente, COUNT(*) AS messages
+        FROM mensajes ${messageActivityDates.sql}
+        GROUP BY cliente
+    `).all(...messageActivityDates.params).forEach((item) => {
+        const client = [...clientActivity.values()].find((candidate) => candidate.label === item.cliente);
+        if (client) client.messages = Number(item.messages);
+    });
+    const commercialRankings = {
+        topByQuotes: [...clientActivity.values()].sort((a, b) => b.quotations - a.quotations).slice(0, 5),
+        topByTransports: [...clientActivity.values()].sort((a, b) => (b.transports || 0) - (a.transports || 0)).slice(0, 5),
+        mostActive: [...clientActivity.values()]
+            .map((item) => ({ ...item, activity: item.quotations + (item.transports || 0) + (item.messages || 0) }))
+            .sort((a, b) => b.activity - a.activity).slice(0, 5)
+    };
+    const pendingServices = countStatus(reports.transportes.byStatus, ['Pendiente']);
+    const inProgressServices = countStatus(reports.transportes.byStatus, ['En Proceso']);
+    const finishedServices = countStatus(reports.transportes.byStatus, ['Finalizado']);
+    const alerts = [];
+    if (pendingServices) alerts.push({ level: 'warning', message: `${pendingServices} transporte(s) pendiente(s) de iniciar` });
+    if (kpis.pendingQuotes) alerts.push({ level: 'info', message: `${kpis.pendingQuotes} cotización(es) esperan aprobación` });
+    if (kpis.activeContainers > inProgressServices + finishedServices) {
+        alerts.push({ level: 'warning', message: 'Hay contenedores activos sin servicio finalizado' });
+    }
 
-    return { counts, activity, recentRecords, reports: reportData() };
+    return {
+        filters: { from, to },
+        counts,
+        kpis,
+        executive,
+        commercial: {
+            quotedValue: reports.cotizaciones.totalValue,
+            averageQuote: reports.cotizaciones.averageValue,
+            approvedQuotes,
+            conversionRate: totalQuotations ? Math.round((approvedQuotes / totalQuotations) * 100) : 0,
+            rankings: commercialRankings
+        },
+        operational: {
+            transportsInProcess: executive.transportsInProcess,
+            finishedServices: executive.finishedServices,
+            containersByStatus: reports.contenedores.byStatus,
+            monitoring: {
+                pendingQuotes: countStatus(reports.cotizaciones.byStatus, ['Pendiente']),
+                approvedQuotes,
+                transportsInProcess: countStatus(reports.transportes.byStatus, ['En Proceso']),
+                transportsFinished: countStatus(reports.transportes.byStatus, ['Finalizado']),
+                activeContainers: reports.contenedores.byStatus
+                    .filter((item) => !['Finalizado', 'Entregado'].includes(item.label))
+                    .reduce((sum, item) => sum + Number(item.value || 0), 0),
+                deliveredContainers: countStatus(reports.contenedores.byStatus, ['Finalizado', 'Entregado']),
+                pendingInvoices: countStatus(reports.facturas.byStatus, ['Pendiente']),
+                pendingServices,
+                inProgressServices,
+                finishedServices,
+                alerts
+            },
+            alerts
+        },
+        charts: {
+            clientsByProvince: reports.clientes.byProvince,
+            quotationsByStatus: reports.cotizaciones.byStatus,
+            transportsByStatus: reports.transportes.byStatus,
+            billingByMonth,
+            billingByYear,
+            topClients,
+            activityByMonth: database.prepare(`
+                SELECT strftime('%Y-%m', created_at) AS label, COUNT(*) AS value
+                FROM actividad ${dateCondition().sql}
+                GROUP BY label ORDER BY label
+            `).all(...dateCondition().params)
+        },
+        financial: {
+            billingByMonth,
+            billingByYear,
+            pendingInvoices: countStatus(reports.facturas.byStatus, ['Pendiente']),
+            paidInvoices: countStatus(reports.facturas.byStatus, ['Pagada'])
+        },
+        activity,
+        recentRecords,
+        reports
+    };
 }
 
-function reportData() {
-    const status = (table) => database.prepare(`
-        SELECT COALESCE(NULLIF(estado, ''), 'Sin estado') AS label, COUNT(*) AS value
-        FROM "${table}" GROUP BY label ORDER BY value DESC
-    `).all();
+function reportFilters(filters = {}) {
+    const from = String(filters.from || '').trim();
+    const to = String(filters.to || '').trim();
+    const status = String(filters.status || '').trim();
+    if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) throw validationError('Fecha inicial inválida');
+    if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw validationError('Fecha final inválida');
+    if (from && to && from > to) throw validationError('La fecha inicial no puede ser posterior a la fecha final');
+    const clauses = [];
+    const params = [];
+    if (from) {
+        clauses.push('date(created_at) >= date(?)');
+        params.push(from);
+    }
+    if (to) {
+        clauses.push('date(created_at) <= date(?)');
+        params.push(to);
+    }
+    return {
+        from,
+        to,
+        status,
+        where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
+        params
+    };
+}
+
+function reportData(filters = {}, empresaId = null) {
+    const { status: statusFilter, where, params } = reportFilters(filters);
+    const filtered = (table, extra = '') => {
+        const conditions = [where ? where.replace(/\bcreated_at\b/g, `"${table}".created_at`) : '', extra].filter(Boolean);
+        const sql = conditions.length ? `WHERE ${conditions.map((item) => item.replace(/^WHERE\s+/i, '')).join(' AND ')}` : '';
+        const conditionsWithTenant = [...conditions];
+        const values = [...params];
+        if (extra && statusFilter) values.push(statusFilter);
+        if (empresaId && tenantTables.includes(table)) {
+            conditionsWithTenant.push(`"${table}".empresa_id = ?`);
+            values.push(Number(empresaId));
+        }
+        const sqlWithTenant = conditionsWithTenant.length
+            ? `WHERE ${conditionsWithTenant.map((item) => item.replace(/^WHERE\s+/i, '')).join(' AND ')}`
+            : '';
+        return { sql: sqlWithTenant, values };
+    };
+    const status = (table) => {
+        const filter = filtered(table, statusFilter ? `"${table}".estado = ?` : '');
+        return database.prepare(`
+            SELECT COALESCE(NULLIF(estado, ''), 'Sin estado') AS label, COUNT(*) AS value
+            FROM "${table}" ${filter.sql} GROUP BY label ORDER BY value DESC
+        `).all(...filter.values);
+    };
+    const clientsFilter = filtered('clientes');
     const byProvince = database.prepare(`
         SELECT COALESCE(NULLIF(provincia, ''), 'Sin provincia') AS label, COUNT(*) AS value
-        FROM clientes GROUP BY label ORDER BY value DESC
-    `).all();
+        FROM clientes ${clientsFilter.sql} GROUP BY label ORDER BY value DESC
+    `).all(...clientsFilter.values);
+    const messagesFilter = filtered('mensajes', statusFilter ? 'mensajes.estado = ?' : '');
     const byChannel = database.prepare(`
         SELECT COALESCE(NULLIF(canal, ''), 'Sin canal') AS label, COUNT(*) AS value
-        FROM mensajes GROUP BY label ORDER BY value DESC
-    `).all();
+        FROM mensajes ${messagesFilter.sql} GROUP BY label ORDER BY value DESC
+    `).all(...messagesFilter.values);
+    const quotationsFilter = filtered('cotizaciones', statusFilter ? 'cotizaciones.estado = ?' : '');
     const quotationsValue = database.prepare(`
         SELECT COALESCE(SUM(CAST(importe AS REAL)), 0) AS total,
                COALESCE(AVG(CAST(importe AS REAL)), 0) AS average
-        FROM cotizaciones
-    `).get();
+        FROM cotizaciones ${quotationsFilter.sql}
+    `).get(...quotationsFilter.values);
+    const total = (table) => {
+        const filter = filtered(table, statusFilter && ['cotizaciones', 'transportes', 'contenedores', 'mensajes', 'facturas'].includes(table)
+            ? `"${table}".estado = ?` : '');
+        return database.prepare(`SELECT COUNT(*) AS value FROM "${table}" ${filter.sql}`).get(...filter.values).value;
+    };
     return {
         clientes: {
-            total: database.prepare('SELECT COUNT(*) AS value FROM clientes').get().value,
+            total: total('clientes'),
             byProvince
         },
         cotizaciones: {
-            total: database.prepare('SELECT COUNT(*) AS value FROM cotizaciones').get().value,
+            total: total('cotizaciones'),
             totalValue: quotationsValue.total,
             averageValue: quotationsValue.average,
             byStatus: status('cotizaciones')
         },
         transportes: {
-            total: database.prepare('SELECT COUNT(*) AS value FROM transportes').get().value,
+            total: total('transportes'),
             byStatus: status('transportes')
         },
         contenedores: {
-            total: database.prepare('SELECT COUNT(*) AS value FROM contenedores').get().value,
+            total: total('contenedores'),
             byStatus: status('contenedores')
         },
         mensajes: {
-            total: database.prepare('SELECT COUNT(*) AS value FROM mensajes').get().value,
+            total: total('mensajes'),
             byChannel
+        },
+        facturas: {
+            total: total('facturas'),
+            byStatus: status('facturas')
         }
+    };
+}
+
+function reportRows(filters = {}, empresaId = null) {
+    const { status: statusFilter, where, params } = reportFilters(filters);
+    const rows = (table, columns, statusColumn = false) => {
+        const conditions = [where ? where.replace(/\bcreated_at\b/g, `"${table}".created_at`).replace(/^WHERE\s+/i, '') : ''];
+        const values = [...params];
+        if (empresaId && tenantTables.includes(table)) {
+            conditions.push(`"${table}".empresa_id = ?`);
+            values.push(Number(empresaId));
+        }
+        if (statusColumn && statusFilter) {
+            conditions.push(`"${table}".estado = ?`);
+            values.push(statusFilter);
+        }
+        const sql = conditions.filter(Boolean).length
+            ? `WHERE ${conditions.filter(Boolean).join(' AND ')}`
+            : '';
+        return database.prepare(`SELECT ${columns} FROM "${table}" ${sql} ORDER BY created_at DESC, id DESC`)
+            .all(...values);
+    };
+    return {
+        Clientes: rows('clientes', 'id, nombre, telefono, correo, provincia, created_at'),
+        Cotizaciones: rows('cotizaciones', 'id, cliente, cliente_id, origen, destino, servicio, importe, estado, created_at', true),
+        Transportes: rows('transportes', 'id, cliente, cliente_id, cotizacion_id, origen, destino, tipo, estado, created_at', true),
+        Contenedores: rows('contenedores', 'id, numero, cliente, cliente_id, transporte_id, tipo, puerto, estado, created_at', true),
+        Mensajes: rows('mensajes', 'id, canal, cliente, mensaje, estado, created_at', true),
+        Facturas: rows('facturas', 'id, numero, cliente_id, transporte_id, contenedor_id, importe, estado, fecha_emision, fecha_pago, created_at', true)
     };
 }
 
@@ -866,6 +1636,7 @@ function assertTable(table) {
 }
 
 module.exports = {
-    authenticate, create, dashboardData, list, remove, reportData, revokeSession,
-    sessionUser, setRolePermissions, update, updateStatus, workflowStatuses
+    authenticate, create, dashboardData, list, recordAudit, remove, reportData, reportRows,
+    revokeSession, sessionUser, setRolePermissions, traceability, update, updateStatus,
+    workflowStatuses
 };

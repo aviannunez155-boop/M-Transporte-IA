@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facturación | MiTransporte IA</title>
+<link rel="stylesheet" href="/sidebar.css">
+<style>
+body{font-family:Arial,sans-serif;background:#f5f6fa;padding:20px}.card{padding:20px;margin-bottom:20px;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.1)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}label{display:block;margin:10px 0 5px}input,select{width:100%;padding:10px;margin-bottom:14px;box-sizing:border-box}button{padding:10px 16px;border:0;border-radius:6px;color:#fff;background:#0c63e7;cursor:pointer}.secondary{color:#0c63e7;background:#e8f0ff}table{width:100%;border-collapse:collapse}th{padding:10px;color:#fff;background:#0c63e7;text-align:left}td{padding:10px;border-bottom:1px solid #ddd}.actions{display:flex;gap:7px;flex-wrap:wrap}.muted{color:#8b96ae}.status{display:inline-block;padding:4px 8px;border-radius:12px;background:#fff2cf;color:#8a6500;font-size:12px}.status.Pagada{background:#dff7e9;color:#167342}.status.Vencida{background:#ffe0e4;color:#a52d3a}@media(max-width:700px){.form-grid{grid-template-columns:1fr}table{display:block;overflow-x:auto;white-space:nowrap}}
+</style>
+</head>
+<body>
+<h1>Facturación</h1>
+<div class="card">
+  <h2>Nueva factura</h2>
+  <div class="form-grid">
+    <div><label>Contenedor</label><select id="contenedor_id"><option value="">Cargando contenedores...</option></select></div>
+    <div><label>Transporte asociado</label><input id="transporte" readonly placeholder="Se completa desde el contenedor"></div>
+    <div><label>Cliente asociado</label><input id="cliente" readonly placeholder="Se completa desde el contenedor"></div>
+    <div><label>Número de factura</label><input id="numero" required placeholder="FAC-0001"></div>
+    <div><label>Importe</label><input id="importe" type="number" step="0.01" placeholder="Se completa desde la cotización"></div>
+    <div><label>Fecha de emisión</label><input id="fecha_emision" type="date" required></div>
+  </div>
+  <label>Observaciones</label><input id="observaciones">
+  <button id="save">Crear factura</button>
+</div>
+<div class="card">
+  <h2>Facturas registradas</h2>
+  <table><thead><tr><th>Número</th><th>Cliente</th><th>Transporte</th><th>Contenedor</th><th>Emisión</th><th>Pago</th><th>Importe</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="table"></tbody></table>
+</div>
+<script src="/api.js"></script>
+<script>
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+async function render() {
+  const [containers, invoices] = await Promise.all([loadRecords("contenedores"), loadRecords("facturas")]);
+  const billed = new Set(invoices.map((invoice) => invoice.contenedor_id));
+  document.getElementById("contenedor_id").innerHTML = '<option value="">Seleccione un contenedor</option>' +
+    containers.filter((container) => container.transporte_id && !billed.has(container.id)).map((container) =>
+      `<option value="${container.id}">#${container.id} · ${esc(container.numero || "Sin número")} · ${esc(container.cliente)}</option>`).join("");
+  document.getElementById("table").innerHTML = invoices.map((invoice) => `<tr>
+    <td>${esc(invoice.numero || `#${invoice.id}`)}</td><td>${esc(invoice.cliente)}</td>
+    <td>#${esc(invoice.transporte_id)}</td><td>${esc(invoice.contenedor_numero || invoice.contenedor_id)}</td>
+    <td>${esc(invoice.fecha_emision || "—")}</td><td>${esc(invoice.fecha_pago || "—")}</td>
+    <td>${esc(invoice.importe)}</td><td><span class="status ${esc(invoice.estado)}">${esc(invoice.estado)}</span></td>
+    <td class="actions">${invoice.estado === "Pendiente" ? `<button data-pay="${invoice.id}">Marcar pagada</button><button class="secondary" data-expire="${invoice.id}">Marcar vencida</button>` : invoice.estado === "Vencida" ? `<button data-pay="${invoice.id}">Registrar pago</button>` : ""}
+      <a href="/seguimiento-app?transporte=${invoice.transporte_id}">Ver trazabilidad</a></td></tr>`).join("");
+  document.querySelectorAll("[data-pay]").forEach((button) => button.addEventListener("click", async () => {
+    try { await updateStatus("facturas", button.dataset.pay, "Pagada"); await render(); } catch (error) { showApiError(error); }
+  }));
+  document.querySelectorAll("[data-expire]").forEach((button) => button.addEventListener("click", async () => {
+    try { await updateStatus("facturas", button.dataset.expire, "Vencida"); await render(); } catch (error) { showApiError(error); }
+  }));
+}
+document.getElementById("contenedor_id").addEventListener("change", (event) => {
+  const selected = [...document.getElementById("contenedor_id").options].find((option) => option.value === event.target.value);
+  const container = selected ? containersCache.find((item) => String(item.id) === selected.value) : null;
+  document.getElementById("transporte").value = container?.transporte_id ? `#${container.transporte_id}` : "";
+  document.getElementById("cliente").value = container?.cliente || "";
+});
+let containersCache = [];
+document.getElementById("save").addEventListener("click", async () => {
+  const payload = { contenedor_id:document.getElementById("contenedor_id").value, numero:document.getElementById("numero").value,
+    importe:document.getElementById("importe").value, fecha_emision:document.getElementById("fecha_emision").value,
+    observaciones:document.getElementById("observaciones").value, estado:"Pendiente" };
+  if (!payload.contenedor_id || !payload.numero) return alert("Seleccione un contenedor e indique el número");
+  try { await saveRecord("facturas", payload); document.getElementById("numero").value=""; document.getElementById("importe").value=""; await render(); }
+  catch (error) { showApiError(error); }
+});
+document.getElementById("fecha_emision").value = new Date().toISOString().slice(0, 10);
+const originalRender = render;
+render = async function() {
+  const [containers] = await Promise.all([loadRecords("contenedores")]);
+  containersCache = containers;
+  return originalRender();
+};
+render().catch(showApiError);
+</script>
+<script src="/sidebar.js"></script>
+</body>
+</html>
