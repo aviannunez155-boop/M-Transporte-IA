@@ -212,7 +212,8 @@
       ["Transportes finalizados", monitoring.transportsFinished],
       ["Contenedores activos", monitoring.activeContainers],
       ["Contenedores entregados", monitoring.deliveredContainers],
-      ["Facturas pendientes", monitoring.pendingInvoices]
+      ["Facturas pendientes", monitoring.pendingInvoices],
+      ["Facturas vencidas", monitoring.overdueInvoices]
     ];
     document.getElementById("operationsBoard").innerHTML = operationItems.map(([label, value]) =>
       `<div class="operation-card"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`
@@ -287,6 +288,7 @@
     document.getElementById("financialSummary").innerHTML = [
       ["Facturas pendientes", data.financial.pendingInvoices],
       ["Facturas pagadas", data.financial.paidInvoices],
+      ["Facturas vencidas", data.financial.overdueInvoices],
       ["Total facturado", Number(data.financial.totalInvoiced || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })],
       ["Total pendiente", Number(data.financial.totalPending || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })]
     ].map(([label, value]) => `<div class="metric-item"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");

@@ -241,9 +241,12 @@ const server = http.createServer((req, res) => {
         }
         return;
     }
-    const traceabilityMatch = req.url.match(/^\/trazabilidad\/(transportes|contenedores)\/(\d+)$/);
+    const traceabilityMatch = req.url.match(/^\/trazabilidad\/(clientes|cotizaciones|transportes|contenedores|facturas)\/(\d+)$/);
     if (traceabilityMatch) {
-        if (!hasPermission(req.actor, 'transportes.read')) {
+        const tracePermission = traceabilityMatch[1] === 'facturas'
+            ? 'facturas.read'
+            : `${traceabilityMatch[1]}.read`;
+        if (!hasPermission(req.actor, tracePermission)) {
             denyAccess(res, 403, 'No tiene permisos para consultar la trazabilidad');
             return;
         }

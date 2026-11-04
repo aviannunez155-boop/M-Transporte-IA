@@ -151,6 +151,7 @@ Guardar Cotización
 <th>Servicio</th>
 <th>Importe</th>
 <th>Estado</th>
+<th>Trazabilidad</th>
 </tr>
 
 </thead>
@@ -180,7 +181,7 @@ async function mostrarCotizaciones() {
   const tabla = document.getElementById("tablaCotizaciones");
   const cotizaciones = await loadRecords("cotizaciones");
   tabla.innerHTML = cotizaciones.map((c) => `
-    <tr><td>${c.id}</td><td>${escapeHtml(c.cliente)}</td><td>${escapeHtml(c.servicio)}</td><td>$${escapeHtml(c.importe)}</td><td>${escapeHtml(c.estado)}</td></tr>
+    <tr><td>${c.id}</td><td>${escapeHtml(c.cliente)}</td><td>${escapeHtml(c.servicio)}</td><td>$${escapeHtml(c.importe)}</td><td>${escapeHtml(c.estado)}</td><td><a href="/seguimiento-app?modulo=cotizaciones&id=${c.id}">Ver expediente</a></td></tr>
   `).join("");
 }
 

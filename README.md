@@ -76,8 +76,13 @@ cada transición en `historial_estados` y `auditoria`.
 
 Las pantallas `/facturas-app` y `/seguimiento-app` permiten gestionar facturas
 y consultar la trazabilidad completa de un transporte. La API
-`GET /trazabilidad/transportes/:id` (o `/trazabilidad/contenedores/:id`)
-devuelve cliente, cotización, transporte, contenedores, facturas e historial.
+`GET /trazabilidad/:modulo/:id` acepta `clientes`, `cotizaciones`,
+`transportes`, `contenedores` o `facturas` y resuelve el expediente completo
+desde cualquier módulo. Devuelve cliente, cotización, transporte,
+contenedores, facturas, una línea temporal unificada de estados y auditoría,
+además del historial persistido en SQLite. Las rutas antiguas
+`/trazabilidad/transportes/:id` y `/trazabilidad/contenedores/:id` se mantienen
+compatibles.
 
 El acceso SaaS usa sesiones SQLite con cookies `HttpOnly`. El usuario inicial
 es `admin@mitransporte.local`; en desarrollo su contraseña predeterminada es
@@ -127,15 +132,15 @@ la auditoría puntual con `GET /auditoria/:modulo/:id`.
 ### Facturación
 
 El módulo `/facturas-app` gestiona facturas relacionadas con cliente,
-cotización, transporte y contenedor. Cada factura conserva número, importe,
-fecha de emisión, vencimiento, pago y observaciones. Sus estados son
-`Pendiente`, `Pagada`, `Vencida` y `Cancelada`; el pago registra la fecha,
-actualiza la trazabilidad y finaliza el servicio asociado. La API REST expone
-`GET/POST /facturas`, `PUT/PATCH /facturas/:id` y
+cotización, transporte y contenedor. Cada factura conserva número, moneda ISO
+de tres letras, importe, fecha de emisión, vencimiento, pago y observaciones.
+Sus estados son `Borrador`, `Pendiente`, `Pagada`, `Vencida` y `Cancelada`;
+el flujo válido es `Borrador → Pendiente → Pagada/Vencida/Cancelada`. El pago
+registra la fecha, actualiza la trazabilidad y finaliza el servicio asociado.
+La API REST expone `GET/POST /facturas`, `PUT/PATCH /facturas/:id` y
 `PATCH /facturas/:id/estado`, con aislamiento por empresa y permisos
 `facturas.read`/`facturas.manage`. El dashboard y los reportes incluyen total
-facturado, total pendiente, facturas pendientes, pagadas, vencidas y
-canceladas.
+facturado, total pendiente, facturas pagadas, vencidas y desglose por moneda.
 
 ### Reportes empresariales
 

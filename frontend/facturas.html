@@ -6,7 +6,7 @@
 <title>Facturación | MiTransporte IA</title>
 <link rel="stylesheet" href="/sidebar.css">
 <style>
-body{font-family:Arial,sans-serif;background:#f5f6fa;padding:20px}.card{padding:20px;margin-bottom:20px;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.1)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}label{display:block;margin:10px 0 5px}input,select{width:100%;padding:10px;margin-bottom:14px;box-sizing:border-box}button{padding:10px 16px;border:0;border-radius:6px;color:#fff;background:#0c63e7;cursor:pointer}.secondary{color:#0c63e7;background:#e8f0ff}.danger{color:#a52d3a;background:#ffe0e4}table{width:100%;border-collapse:collapse}th{padding:10px;color:#fff;background:#0c63e7;text-align:left}td{padding:10px;border-bottom:1px solid #ddd}.actions{display:flex;gap:7px;flex-wrap:wrap}.muted{color:#8b96ae}.status{display:inline-block;padding:4px 8px;border-radius:12px;background:#fff2cf;color:#8a6500;font-size:12px}.status.Pagada{background:#dff7e9;color:#167342}.status.Vencida{background:#ffe0e4;color:#a52d3a}.status.Cancelada{background:#edf1f8;color:#526080}@media(max-width:700px){.form-grid{grid-template-columns:1fr}table{display:block;overflow-x:auto;white-space:nowrap}}
+body{font-family:Arial,sans-serif;background:#f5f6fa;padding:20px}.card{padding:20px;margin-bottom:20px;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.1)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}label{display:block;margin:10px 0 5px}input,select{width:100%;padding:10px;margin-bottom:14px;box-sizing:border-box}button{padding:10px 16px;border:0;border-radius:6px;color:#fff;background:#0c63e7;cursor:pointer}.secondary{color:#0c63e7;background:#e8f0ff}.danger{color:#a52d3a;background:#ffe0e4}table{width:100%;border-collapse:collapse}th{padding:10px;color:#fff;background:#0c63e7;text-align:left}td{padding:10px;border-bottom:1px solid #ddd}.actions{display:flex;gap:7px;flex-wrap:wrap}.muted{color:#8b96ae}.status{display:inline-block;padding:4px 8px;border-radius:12px;background:#fff2cf;color:#8a6500;font-size:12px}.status.Borrador{background:#edf1f8;color:#526080}.status.Pagada{background:#dff7e9;color:#167342}.status.Vencida{background:#ffe0e4;color:#a52d3a}.status.Cancelada{background:#edf1f8;color:#526080}@media(max-width:700px){.form-grid{grid-template-columns:1fr}table{display:block;overflow-x:auto;white-space:nowrap}}
 </style>
 </head>
 <body>
@@ -19,9 +19,11 @@ body{font-family:Arial,sans-serif;background:#f5f6fa;padding:20px}.card{padding:
     <div><label>Cliente asociado</label><input id="cliente" readonly placeholder="Se completa desde el contenedor"></div>
     <div><label>Número de factura</label><input id="numero" required placeholder="FAC-0001"></div>
     <div><label>Cotización asociada</label><input id="cotizacion" readonly placeholder="Se completa desde el contenedor"></div>
+    <div><label>Moneda</label><input id="moneda" value="USD" maxlength="3" required></div>
     <div><label>Importe</label><input id="importe" type="number" step="0.01" placeholder="Se completa desde la cotización"></div>
     <div><label>Fecha de emisión</label><input id="fecha_emision" type="date" required></div>
     <div><label>Fecha de vencimiento</label><input id="fecha_vencimiento" type="date"></div>
+    <div><label>Estado inicial</label><select id="estado"><option>Borrador</option><option>Pendiente</option></select></div>
   </div>
   <label>Observaciones</label><input id="observaciones">
   <button id="save">Crear factura</button>
@@ -43,14 +45,17 @@ async function render() {
     <td>${esc(invoice.numero || `#${invoice.id}`)}</td><td>${esc(invoice.cliente)}</td>
     <td>${invoice.cotizacion_id ? `#${esc(invoice.cotizacion_id)}` : "—"}</td><td>#${esc(invoice.transporte_id)}</td><td>${esc(invoice.contenedor_numero || invoice.contenedor_id)}</td>
     <td>${esc(invoice.fecha_emision || "—")}</td><td>${esc(invoice.fecha_vencimiento || "—")}</td><td>${esc(invoice.fecha_pago || "—")}</td>
-    <td>${esc(invoice.importe)}</td><td><span class="status ${esc(invoice.estado)}">${esc(invoice.estado)}</span></td>
-    <td class="actions">${invoice.estado === "Pendiente" ? `<button data-pay="${invoice.id}">Marcar pagada</button><button class="secondary" data-expire="${invoice.id}">Marcar vencida</button><button class="danger" data-cancel="${invoice.id}">Cancelar</button>` : invoice.estado === "Vencida" ? `<button data-pay="${invoice.id}">Registrar pago</button><button class="danger" data-cancel="${invoice.id}">Cancelar</button>` : ""}
+    <td>${esc(invoice.moneda || "USD")} ${esc(Number(invoice.importe || 0).toFixed(2))}</td><td><span class="status ${esc(invoice.estado)}">${esc(invoice.estado)}</span></td>
+    <td class="actions">${invoice.estado === "Borrador" ? `<button data-submit="${invoice.id}">Emitir</button><button class="danger" data-cancel="${invoice.id}">Cancelar</button>` : invoice.estado === "Pendiente" ? `<button data-pay="${invoice.id}">Marcar pagada</button><button class="secondary" data-expire="${invoice.id}">Marcar vencida</button><button class="danger" data-cancel="${invoice.id}">Cancelar</button>` : invoice.estado === "Vencida" ? `<button data-pay="${invoice.id}">Registrar pago</button><button class="danger" data-cancel="${invoice.id}">Cancelar</button>` : ""}
       <a href="/seguimiento-app?transporte=${invoice.transporte_id}">Ver trazabilidad</a></td></tr>`).join("");
   document.querySelectorAll("[data-pay]").forEach((button) => button.addEventListener("click", async () => {
     try { await updateStatus("facturas", button.dataset.pay, "Pagada"); await render(); } catch (error) { showApiError(error); }
   }));
   document.querySelectorAll("[data-expire]").forEach((button) => button.addEventListener("click", async () => {
     try { await updateStatus("facturas", button.dataset.expire, "Vencida"); await render(); } catch (error) { showApiError(error); }
+  }));
+  document.querySelectorAll("[data-submit]").forEach((button) => button.addEventListener("click", async () => {
+    try { await updateStatus("facturas", button.dataset.submit, "Pendiente"); await render(); } catch (error) { showApiError(error); }
   }));
 }
 document.getElementById("contenedor_id").addEventListener("change", (event) => {
@@ -63,9 +68,10 @@ document.getElementById("contenedor_id").addEventListener("change", (event) => {
 let containersCache = [];
 document.getElementById("save").addEventListener("click", async () => {
   const payload = { contenedor_id:document.getElementById("contenedor_id").value, numero:document.getElementById("numero").value,
-    importe:document.getElementById("importe").value, fecha_emision:document.getElementById("fecha_emision").value,
+    moneda:document.getElementById("moneda").value, importe:document.getElementById("importe").value,
+    estado:document.getElementById("estado").value, fecha_emision:document.getElementById("fecha_emision").value,
     fecha_vencimiento:document.getElementById("fecha_vencimiento").value,
-    observaciones:document.getElementById("observaciones").value, estado:"Pendiente" };
+    observaciones:document.getElementById("observaciones").value };
   if (!payload.contenedor_id || !payload.numero) return alert("Seleccione un contenedor e indique el número");
   try { await saveRecord("facturas", payload); document.getElementById("numero").value=""; document.getElementById("importe").value=""; await render(); }
   catch (error) { showApiError(error); }

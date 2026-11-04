@@ -37,12 +37,11 @@ const definitions = {
     facturas: {
         columns: [
             'cliente_id', 'cotizacion_id', 'transporte_id', 'contenedor_id', 'numero',
-            'importe', 'estado', 'fecha_emision', 'fecha_vencimiento', 'fecha_pago',
+            'moneda', 'importe', 'estado', 'fecha_emision', 'fecha_vencimiento', 'fecha_pago',
             'observaciones'
         ],
         seed: []
     }
-
 };
 
 const adminDefinitions = {
@@ -317,6 +316,9 @@ addColumn('contenedores', 'cliente_id', 'INTEGER REFERENCES clientes(id) ON DELE
 addColumn('contenedores', 'transporte_id', 'INTEGER REFERENCES transportes(id) ON DELETE SET NULL');
 addColumn('facturas', 'cotizacion_id', 'INTEGER REFERENCES cotizaciones(id) ON DELETE SET NULL');
 addColumn('facturas', 'fecha_vencimiento', 'TEXT');
+addColumn('facturas', 'moneda', 'TEXT');
+database.prepare("UPDATE facturas SET moneda = 'USD' WHERE moneda IS NULL OR moneda = ''").run();
+database.prepare("UPDATE facturas SET estado = 'Cancelada' WHERE lower(estado) IN ('anulada', 'cancelada')").run();
 database.exec(`
     UPDATE facturas
     SET cotizacion_id = (
@@ -670,6 +672,20 @@ function update(table, id, payload, usuarioId = 1, empresaId = defaultCompany.id
     }
     if (table === 'facturas') assertTenantRecord('facturas', recordId, empresaId);
     if (table === 'facturas') {
+        if (payload.moneda !== undefined) {
+            const currency = String(payload.moneda || '').trim().toUpperCase();
+            if (!/^[A-Z]{3}$/.test(currency)) {
+                throw validationError('La moneda debe ser un código ISO de tres letras');
+            }
+            payload = { ...payload, moneda: currency };
+        }
+        if (payload.importe !== undefined) {
+            const amount = Number(payload.importe);
+            if (!Number.isFinite(amount) || amount < 0) {
+                throw validationError('El importe debe ser un número mayor o igual a cero');
+            }
+            payload = { ...payload, importe: amount };
+        }
         if (payload.numero !== undefined) {
             const number = String(payload.numero || '').trim();
             if (!number) throw validationError('Debe indicar el número de factura');
@@ -802,7 +818,7 @@ function editableColumns(table) {
         cotizaciones: ['cliente_id', 'telefono', 'origen', 'destino', 'servicio', 'importe', 'estado', 'observaciones'],
         transportes: ['cliente_id', 'cotizacion_id', 'origen', 'destino', 'tipo', 'estado'],
         contenedores: ['cliente_id', 'transporte_id', 'numero', 'tipo', 'puerto', 'estado'],
-        facturas: ['numero', 'importe', 'estado', 'fecha_emision', 'fecha_pago', 'observaciones']
+        facturas: ['numero', 'moneda', 'importe', 'estado', 'fecha_emision', 'fecha_vencimiento', 'fecha_pago', 'observaciones']
     };
     return relationColumns[table] || definitions[table].columns;
 }
@@ -935,9 +951,7 @@ function createContainer(payload, usuarioId = 1, empresaId = defaultCompany.id) 
     return record;
 }
 
-const invoiceStatuses = ['Pendiente', 'Pagada', 'Vencida', 'Cancelada'];
-
-database.prepare("UPDATE facturas SET estado = 'Vencida' WHERE estado = 'Anulada'").run();
+const invoiceStatuses = ['Borrador', 'Pendiente', 'Pagada', 'Vencida', 'Cancelada'];
 
 function normalizeInvoiceStatus(status) {
     const input = String(status || 'Pendiente').trim().toLowerCase();
@@ -956,6 +970,9 @@ function validateInvoiceDate(value, label, required = false) {
 }
 
 function createInvoice(payload, usuarioId = 1, empresaId = defaultCompany.id) {
+    if (!payload.contenedor_id) {
+        throw validationError('Debe seleccionar un contenedor asociado a la factura');
+    }
     assertTenantRecord('contenedores', payload.contenedor_id, empresaId);
     const container = database.prepare(`
         SELECT contenedores.id, contenedores.cliente_id, contenedores.transporte_id,
@@ -979,14 +996,23 @@ function createInvoice(payload, usuarioId = 1, empresaId = defaultCompany.id) {
     if (!invoiceNumber) throw validationError('Debe indicar el número de factura');
     const duplicateNumber = database.prepare('SELECT id FROM facturas WHERE numero = ?').get(invoiceNumber);
     if (duplicateNumber) throw validationError('Ya existe una factura con ese número');
+    const amount = Number(payload.importe ?? container.cotizacion_importe ?? 0);
+    if (!Number.isFinite(amount) || amount < 0) {
+        throw validationError('El importe debe ser un número mayor o igual a cero');
+    }
+    const currency = String(payload.moneda || 'USD').trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+        throw validationError('La moneda debe ser un código ISO de tres letras');
+    }
     const invoice = {
         ...payload,
         cliente_id: container.cliente_id,
         cotizacion_id: container.cotizacion_id,
         transporte_id: container.transporte_id,
         numero: invoiceNumber,
-        importe: payload.importe || container.cotizacion_importe || 0,
-        estado: normalizeInvoiceStatus(payload.estado),
+        moneda: currency,
+        importe: amount,
+        estado: normalizeInvoiceStatus(payload.estado || 'Borrador'),
         fecha_emision: validateInvoiceDate(
             payload.fecha_emision || new Date().toISOString().slice(0, 10),
             'La fecha de emisión',
@@ -997,11 +1023,11 @@ function createInvoice(payload, usuarioId = 1, empresaId = defaultCompany.id) {
             'La fecha de vencimiento'
         )
     };
-    if (invoice.estado !== 'Pendiente') {
-        throw validationError('Una factura nueva debe comenzar en estado Pendiente');
+    if (invoice.fecha_vencimiento && invoice.fecha_vencimiento < invoice.fecha_emision) {
+        throw validationError('La fecha de vencimiento no puede ser anterior a la fecha de emisión');
     }
     const columns = ['cliente_id', 'cotizacion_id', 'transporte_id', 'contenedor_id', 'numero', 'importe',
-        'estado', 'fecha_emision', 'fecha_vencimiento', 'fecha_pago', 'observaciones'];
+        'moneda', 'estado', 'fecha_emision', 'fecha_vencimiento', 'fecha_pago', 'observaciones'];
     const result = insertRecord('facturas', columns, invoice);
     database.prepare('UPDATE facturas SET empresa_id = ? WHERE id = ?').run(empresaId, Number(result.lastInsertRowid));
     const record = list('facturas', empresaId).find((row) => row.id === Number(result.lastInsertRowid));
@@ -1016,12 +1042,17 @@ function updateInvoiceStatus(id, status, usuarioId = 1, empresaId = defaultCompa
     const current = database.prepare('SELECT * FROM facturas WHERE id = ?').get(Number(id));
     if (!current) throw notFoundError();
     if (current.estado === next) return list('facturas').find((row) => row.id === Number(id));
-    if (current.estado === 'Pagada' || current.estado === 'Cancelada'
-        || (current.estado === 'Vencida' && !['Pagada', 'Cancelada'].includes(next))
-        || (current.estado === 'Pendiente' && !['Pagada', 'Vencida', 'Cancelada'].includes(next))) {
-        throw validationError('La factura sólo puede pasar de Pendiente a Pagada, Vencida o Cancelada, o de Vencida a Pagada o Cancelada');
+    const allowedTransitions = {
+        Borrador: ['Pendiente', 'Cancelada'],
+        Pendiente: ['Pagada', 'Vencida', 'Cancelada'],
+        Vencida: ['Pagada', 'Cancelada'],
+        Pagada: [],
+        Cancelada: []
+    };
+    if (!allowedTransitions[current.estado]?.includes(next)) {
+        throw validationError('Transición inválida. Una factura debe avanzar de Borrador a Pendiente, y luego a Pagada, Vencida o Cancelada');
     }
-    const fechaPago = next === 'Pagada' ? new Date().toISOString().slice(0, 10) : null;
+    const fechaPago = next === 'Pagada' ? new Date().toISOString().slice(0, 10) : current.fecha_pago;
     database.prepare('UPDATE facturas SET estado = ?, fecha_pago = ? WHERE id = ?')
         .run(next, fechaPago, Number(id));
     recordStatusHistory('facturas', Number(id), current.estado, next, usuarioId);
@@ -1046,13 +1077,39 @@ function finalizeService(invoice, usuarioId) {
 }
 
 function traceability(type, id, empresaId = null) {
-    let transportId = Number(id);
-    if (type === 'contenedores') {
-        assertTenantRecord('contenedores', transportId, empresaId);
-        const container = database.prepare('SELECT transporte_id FROM contenedores WHERE id = ?').get(transportId);
-        if (!container) throw notFoundError();
-        transportId = container.transporte_id;
+    const resource = String(type || '').trim().toLowerCase();
+    const recordId = Number(id);
+    const supported = ['clientes', 'cotizaciones', 'transportes', 'contenedores', 'facturas'];
+    if (!supported.includes(resource) || !Number.isInteger(recordId) || recordId <= 0) {
+        throw notFoundError();
     }
+
+    let transportId = null;
+    if (resource === 'transportes') {
+        assertTenantRecord('transportes', recordId, empresaId);
+        transportId = recordId;
+    } else if (resource === 'contenedores') {
+        assertTenantRecord('contenedores', recordId, empresaId);
+        transportId = database.prepare('SELECT transporte_id FROM contenedores WHERE id = ?').get(recordId)?.transporte_id;
+    } else if (resource === 'facturas') {
+        assertTenantRecord('facturas', recordId, empresaId);
+        transportId = database.prepare('SELECT transporte_id FROM facturas WHERE id = ?').get(recordId)?.transporte_id;
+    } else if (resource === 'cotizaciones') {
+        assertTenantRecord('cotizaciones', recordId, empresaId);
+        transportId = database.prepare(
+            'SELECT id FROM transportes WHERE cotizacion_id = ? ORDER BY id DESC LIMIT 1'
+        ).get(recordId)?.id;
+    } else if (resource === 'clientes') {
+        assertTenantRecord('clientes', recordId, empresaId);
+        transportId = database.prepare(
+            'SELECT id FROM transportes WHERE cliente_id = ? ORDER BY id DESC LIMIT 1'
+        ).get(recordId)?.id;
+    }
+
+    if (!transportId) {
+        return traceabilityWithoutTransport(resource, recordId, empresaId);
+    }
+
     assertTenantRecord('transportes', transportId, empresaId);
     const transport = database.prepare(`
         SELECT transportes.*, clientes.nombre AS cliente,
@@ -1087,27 +1144,155 @@ function traceability(type, id, empresaId = null) {
           AND (${historyConditions.join(' OR ')})
         ORDER BY auditoria.created_at ASC, auditoria.id ASC
     `).all(Number(empresaId), ...relatedIds);
+    const history = database.prepare(`
+        SELECT historial_estados.*, usuarios.nombre AS usuario
+        FROM historial_estados
+        LEFT JOIN usuarios ON usuarios.id = historial_estados.usuario_id
+        WHERE historial_estados.empresa_id = ?
+          AND (modulo = 'transportes' AND registro_id = ?)
+           OR (modulo = 'contenedores' AND registro_id IN
+               (SELECT id FROM contenedores WHERE transporte_id = ?))
+           OR (modulo = 'facturas' AND registro_id IN
+               (SELECT id FROM facturas WHERE transporte_id = ?))
+           OR (modulo = 'clientes' AND registro_id = ?)
+           OR (modulo = 'cotizaciones' AND registro_id = ?)
+        ORDER BY historial_estados.created_at ASC, historial_estados.id ASC
+    `).all(Number(empresaId), transportId, transportId, transportId, clientId, quotationId || 0);
+    const timeline = [
+        ...history.map((event) => ({
+            id: `estado-${event.id}`,
+            tipo: 'estado',
+            modulo: event.modulo,
+            registro_id: event.registro_id,
+            evento: event.estado_nuevo === 'Aprobado' && event.modulo === 'cotizaciones'
+                ? 'Aprobación'
+                : event.estado_nuevo === 'Pagada' && event.modulo === 'facturas'
+                    ? 'Cobro'
+                    : event.estado_nuevo === 'Finalizado'
+                        ? 'Servicio Finalizado'
+                        : event.estado_nuevo,
+            estado_anterior: event.estado_anterior,
+            estado_nuevo: event.estado_nuevo,
+            usuario: event.usuario || 'Sistema',
+            created_at: event.created_at
+        })),
+        ...auditRows.map((event) => ({
+            id: `auditoria-${event.id}`,
+            tipo: 'auditoria',
+            modulo: event.modulo,
+            registro_id: event.registro_id,
+            evento: event.accion,
+            detalles: event.detalles,
+            usuario: event.usuario || 'Sistema',
+            created_at: event.created_at
+        }))
+    ].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)));
     return {
+        recurso_origen: resource,
+        registro_origen: recordId,
         cliente: database.prepare('SELECT * FROM clientes WHERE id = ?').get(transport.cliente_id),
         cotizacion: transport.cotizacion_id
             ? database.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(transport.cotizacion_id) : null,
         transporte: transport,
         contenedores: database.prepare('SELECT * FROM contenedores WHERE transporte_id = ? ORDER BY id').all(transportId),
         facturas: database.prepare('SELECT * FROM facturas WHERE transporte_id = ? ORDER BY id').all(transportId),
-        historial: database.prepare(`
-            SELECT historial_estados.*, usuarios.nombre AS usuario
-            FROM historial_estados
-            LEFT JOIN usuarios ON usuarios.id = historial_estados.usuario_id
-            WHERE (modulo = 'transportes' AND registro_id = ?)
-               OR (modulo = 'contenedores' AND registro_id IN
-                   (SELECT id FROM contenedores WHERE transporte_id = ?))
-               OR (modulo = 'facturas' AND registro_id IN
-                   (SELECT id FROM facturas WHERE transporte_id = ?))
-               OR (modulo = 'clientes' AND registro_id = ?)
-               OR (modulo = 'cotizaciones' AND registro_id = ?)
-            ORDER BY historial_estados.created_at ASC, historial_estados.id ASC
-        `).all(transportId, transportId, transportId, clientId, quotationId || 0),
-        auditoria: auditRows
+        historial: history,
+        auditoria: auditRows,
+        timeline
+    };
+}
+
+function traceabilityWithoutTransport(resource, recordId, empresaId) {
+    let clientId = null;
+    let quotationId = null;
+    let containerId = null;
+    let invoiceId = null;
+    if (resource === 'clientes') clientId = recordId;
+    if (resource === 'cotizaciones') {
+        quotationId = recordId;
+        clientId = database.prepare('SELECT cliente_id FROM cotizaciones WHERE id = ?').get(recordId)?.cliente_id;
+    }
+    if (resource === 'contenedores') {
+        const container = database.prepare('SELECT * FROM contenedores WHERE id = ?').get(recordId);
+        if (!container) throw notFoundError();
+        containerId = recordId;
+        clientId = container.cliente_id;
+    }
+    if (resource === 'facturas') {
+        const invoice = database.prepare('SELECT * FROM facturas WHERE id = ?').get(recordId);
+        if (!invoice) throw notFoundError();
+        invoiceId = recordId;
+        clientId = invoice.cliente_id;
+        quotationId = invoice.cotizacion_id;
+    }
+    if (!clientId && !quotationId && !containerId && !invoiceId) throw notFoundError();
+    const client = clientId
+        ? database.prepare('SELECT * FROM clientes WHERE id = ?').get(clientId)
+        : null;
+    const quotation = quotationId
+        ? database.prepare('SELECT * FROM cotizaciones WHERE id = ?').get(quotationId)
+        : null;
+    const history = database.prepare(`
+        SELECT historial_estados.*, usuarios.nombre AS usuario
+        FROM historial_estados
+        LEFT JOIN usuarios ON usuarios.id = historial_estados.usuario_id
+        WHERE historial_estados.empresa_id = ?
+          AND (modulo = 'clientes' AND registro_id = ?)
+           OR (modulo = 'cotizaciones' AND registro_id = ?)
+           OR (modulo = 'contenedores' AND registro_id = ?)
+           OR (modulo = 'facturas' AND registro_id = ?)
+        ORDER BY historial_estados.created_at ASC, historial_estados.id ASC
+    `).all(Number(empresaId), clientId || 0, quotationId || 0, containerId || 0, invoiceId || 0);
+    const auditRows = database.prepare(`
+        SELECT auditoria.*, usuarios.nombre AS usuario
+        FROM auditoria
+        LEFT JOIN usuarios ON usuarios.id = auditoria.usuario_id
+        WHERE auditoria.empresa_id = ?
+          AND ((modulo = 'clientes' AND registro_id = ?)
+            OR (modulo = 'cotizaciones' AND registro_id = ?)
+            OR (modulo = 'contenedores' AND registro_id = ?)
+            OR (modulo = 'facturas' AND registro_id = ?))
+        ORDER BY auditoria.created_at ASC, auditoria.id ASC
+    `).all(Number(empresaId), clientId || 0, quotationId || 0, containerId || 0, invoiceId || 0);
+    const container = containerId
+        ? database.prepare('SELECT * FROM contenedores WHERE id = ?').get(containerId)
+        : null;
+    const invoice = invoiceId
+        ? database.prepare('SELECT * FROM facturas WHERE id = ?').get(invoiceId)
+        : null;
+    return {
+        recurso_origen: resource,
+        registro_origen: recordId,
+        cliente: client,
+        cotizacion: quotation,
+        transporte: null,
+        contenedores: container ? [container] : [],
+        facturas: invoice ? [invoice] : [],
+        historial: history,
+        auditoria: auditRows,
+        timeline: [
+            ...history.map((event) => ({
+                id: `estado-${event.id}`,
+                tipo: 'estado',
+                modulo: event.modulo,
+                registro_id: event.registro_id,
+                evento: event.estado_nuevo === 'Aprobado' ? 'Aprobación' : event.estado_nuevo,
+                estado_anterior: event.estado_anterior,
+                estado_nuevo: event.estado_nuevo,
+                usuario: event.usuario || 'Sistema',
+                created_at: event.created_at
+            })),
+            ...auditRows.map((event) => ({
+                id: `auditoria-${event.id}`,
+                tipo: 'auditoria',
+                modulo: event.modulo,
+                registro_id: event.registro_id,
+                evento: event.accion,
+                detalles: event.detalles,
+                usuario: event.usuario || 'Sistema',
+                created_at: event.created_at
+            }))
+        ].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)))
     };
 }
 
@@ -1531,6 +1716,8 @@ function dashboardData(filters = {}, empresaId = null) {
                     .reduce((sum, item) => sum + Number(item.value || 0), 0),
                 deliveredContainers: countStatus(reports.contenedores.byStatus, ['Finalizado', 'Entregado']),
                 pendingInvoices: countStatus(reports.facturas.byStatus, ['Pendiente']),
+                overdueInvoices: countStatus(reports.facturas.byStatus, ['Vencida']),
+                paidInvoices: countStatus(reports.facturas.byStatus, ['Pagada']),
                 pendingServices,
                 inProgressServices,
                 finishedServices,
@@ -1556,8 +1743,11 @@ function dashboardData(filters = {}, empresaId = null) {
             billingByYear,
             pendingInvoices: countStatus(reports.facturas.byStatus, ['Pendiente']),
             paidInvoices: countStatus(reports.facturas.byStatus, ['Pagada']),
+            overdueInvoices: countStatus(reports.facturas.byStatus, ['Vencida']),
             totalInvoiced: reports.facturas.totalValue,
-            totalPending: reports.facturas.pendingValue
+            totalPending: reports.facturas.pendingValue,
+            paidValue: reports.facturas.paidValue,
+            overdueValue: reports.facturas.overdueValue
         },
         activity,
         recentRecords,
@@ -1633,10 +1823,24 @@ function reportData(filters = {}, empresaId = null) {
     `).get(...quotationsFilter.values);
     const invoicesFilter = filtered('facturas', statusFilter ? 'facturas.estado = ?' : '');
     const invoicesValue = database.prepare(`
-        SELECT COALESCE(SUM(CAST(importe AS REAL)), 0) AS total,
+        SELECT COALESCE(SUM(CASE WHEN estado IN ('Pendiente', 'Pagada', 'Vencida') THEN CAST(importe AS REAL) ELSE 0 END), 0) AS total,
                COALESCE(SUM(CASE WHEN estado IN ('Pendiente', 'Vencida') THEN CAST(importe AS REAL) ELSE 0 END), 0) AS pending
         FROM facturas ${invoicesFilter.sql}
     `).get(...invoicesFilter.values);
+    const invoiceStatusValues = database.prepare(`
+        SELECT
+            COALESCE(SUM(CASE WHEN estado = 'Pagada' THEN CAST(importe AS REAL) ELSE 0 END), 0) AS paid,
+            COALESCE(SUM(CASE WHEN estado = 'Vencida' THEN CAST(importe AS REAL) ELSE 0 END), 0) AS overdue
+        FROM facturas ${invoicesFilter.sql}
+    `).get(...invoicesFilter.values);
+    const invoiceCurrencies = database.prepare(`
+        SELECT COALESCE(NULLIF(moneda, ''), 'USD') AS label,
+               COALESCE(SUM(CASE WHEN estado IN ('Pendiente', 'Pagada', 'Vencida') THEN CAST(importe AS REAL) ELSE 0 END), 0) AS total,
+               COALESCE(SUM(CASE WHEN estado = 'Pendiente' OR estado = 'Vencida' THEN CAST(importe AS REAL) ELSE 0 END), 0) AS pending,
+               COUNT(*) AS invoices
+        FROM facturas ${invoicesFilter.sql}
+        GROUP BY label ORDER BY total DESC
+    `).all(...invoicesFilter.values);
     const total = (table) => {
         const filter = filtered(table, statusFilter && ['cotizaciones', 'transportes', 'contenedores', 'mensajes', 'facturas'].includes(table)
             ? `"${table}".estado = ?` : '');
@@ -1669,6 +1873,9 @@ function reportData(filters = {}, empresaId = null) {
             total: total('facturas'),
             totalValue: invoicesValue.total,
             pendingValue: invoicesValue.pending,
+            paidValue: invoiceStatusValues.paid,
+            overdueValue: invoiceStatusValues.overdue,
+            byCurrency: invoiceCurrencies,
             byStatus: status('facturas')
         }
     };
@@ -1699,7 +1906,7 @@ function reportRows(filters = {}, empresaId = null) {
         Transportes: rows('transportes', 'id, cliente, cliente_id, cotizacion_id, origen, destino, tipo, estado, created_at', true),
         Contenedores: rows('contenedores', 'id, numero, cliente, cliente_id, transporte_id, tipo, puerto, estado, created_at', true),
         Mensajes: rows('mensajes', 'id, canal, cliente, mensaje, estado, created_at', true),
-        Facturas: rows('facturas', 'id, numero, cliente_id, cotizacion_id, transporte_id, contenedor_id, importe, estado, fecha_emision, fecha_vencimiento, fecha_pago, created_at', true)
+        Facturas: rows('facturas', 'id, numero, cliente_id, cotizacion_id, transporte_id, contenedor_id, moneda, importe, estado, fecha_emision, fecha_vencimiento, fecha_pago, created_at', true)
     };
 }
 

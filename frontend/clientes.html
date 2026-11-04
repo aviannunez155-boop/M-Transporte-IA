@@ -111,6 +111,7 @@ Guardar Cliente
 <th>Nombre</th>
 <th>Teléfono</th>
 <th>Provincia</th>
+<th>Trazabilidad</th>
 </tr>
 </thead>
 
@@ -128,7 +129,7 @@ async function mostrarClientes() {
   const tabla = document.getElementById("tablaClientes");
   const clientes = await loadRecords("clientes");
   tabla.innerHTML = clientes.map((c) => `
-    <tr><td>${c.id}</td><td>${c.nombre}</td><td>${c.telefono}</td><td>${c.provincia}</td></tr>
+    <tr><td>${c.id}</td><td>${c.nombre}</td><td>${c.telefono}</td><td>${c.provincia}</td><td><a href="/seguimiento-app?modulo=clientes&id=${c.id}">Ver expediente</a></td></tr>
   `).join("");
 }
 

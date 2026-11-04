@@ -117,6 +117,7 @@ Guardar Solicitud
 <th>Destino</th>
 <th>Servicio</th>
 <th>Estado</th>
+<th>Trazabilidad</th>
 </tr>
 </thead>
 
@@ -161,7 +162,7 @@ async function mostrarServicios() {
   const tabla = document.getElementById("tablaServicios");
   const servicios = await loadRecords("transportes");
   tabla.innerHTML = servicios.map((s) => `
-    <tr><td>${s.id}</td><td>${escapeHtml(s.cliente)}</td><td>${escapeHtml(s.origen)}</td><td>${escapeHtml(s.destino)}</td><td>${escapeHtml(s.tipo)}</td><td>${escapeHtml(s.estado)}</td></tr>
+    <tr><td>${s.id}</td><td>${escapeHtml(s.cliente)}</td><td>${escapeHtml(s.origen)}</td><td>${escapeHtml(s.destino)}</td><td>${escapeHtml(s.tipo)}</td><td>${escapeHtml(s.estado)}</td><td><a href="/seguimiento-app?modulo=transportes&id=${s.id}">Ver expediente</a></td></tr>
   `).join("");
 }
 
