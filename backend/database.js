@@ -6,7 +6,7 @@ const database = new DatabaseSync(
     path.join(__dirname, 'mitransporte.sqlite')
 );
 database.exec('PRAGMA foreign_keys = ON');
-const tenantTables = ['clientes', 'cotizaciones', 'transportes', 'contenedores', 'mensajes', 'facturas',
+const tenantTables = ['clientes', 'cotizaciones', 'transportes', 'contenedores', 'mensajes', 'facturas', 'pagos',
     'usuarios', 'configuracion', 'actividad', 'auditoria', 'historial_estados', 'sucursales'];
 const saasTables = ['empresas', 'sucursales'];
 
@@ -39,6 +39,13 @@ const definitions = {
             'cliente_id', 'cotizacion_id', 'transporte_id', 'contenedor_id', 'numero',
             'moneda', 'importe', 'estado', 'fecha_emision', 'fecha_vencimiento', 'fecha_pago',
             'observaciones'
+        ],
+        seed: []
+    },
+    pagos: {
+        columns: [
+            'factura_id', 'cliente_id', 'moneda', 'importe', 'fecha_pago',
+            'metodo', 'referencia', 'observaciones'
         ],
         seed: []
     }
@@ -273,6 +280,8 @@ const defaultPermissions = [
     ['mensajes.manage', 'Gestionar mensajes'],
     ['facturas.read', 'Consultar facturas'],
     ['facturas.manage', 'Gestionar facturas'],
+    ['pagos.read', 'Consultar pagos'],
+    ['pagos.manage', 'Registrar pagos'],
     ['reports.read', 'Ver reportes'],
     ['administracion.manage', 'Gestionar administración']
 ];
@@ -288,9 +297,9 @@ if (adminRole) {
     `).run(adminRole.id);
 }
 const rolePermissions = {
-    Operador: ['dashboard.read', 'clientes.read', 'clientes.manage', 'cotizaciones.read', 'transportes.read', 'transportes.manage', 'contenedores.read', 'contenedores.manage', 'mensajes.read', 'mensajes.manage', 'facturas.read', 'facturas.manage'],
+    Operador: ['dashboard.read', 'clientes.read', 'clientes.manage', 'cotizaciones.read', 'transportes.read', 'transportes.manage', 'contenedores.read', 'contenedores.manage', 'mensajes.read', 'mensajes.manage', 'facturas.read', 'facturas.manage', 'pagos.read', 'pagos.manage'],
     Comercial: ['dashboard.read', 'clientes.read', 'clientes.manage', 'cotizaciones.read', 'cotizaciones.manage', 'mensajes.read', 'mensajes.manage', 'reports.read'],
-    Consulta: ['dashboard.read', 'clientes.read', 'cotizaciones.read', 'transportes.read', 'contenedores.read', 'mensajes.read', 'facturas.read', 'reports.read']
+    Consulta: ['dashboard.read', 'clientes.read', 'cotizaciones.read', 'transportes.read', 'contenedores.read', 'mensajes.read', 'facturas.read', 'pagos.read', 'reports.read']
 };
 for (const [roleName, permissionKeys] of Object.entries(rolePermissions)) {
     const role = database.prepare('SELECT id FROM roles WHERE nombre = ?').get(roleName);
@@ -338,6 +347,9 @@ database.exec(`
     CREATE INDEX IF NOT EXISTS idx_facturas_cotizacion_id ON facturas(cotizacion_id);
     CREATE INDEX IF NOT EXISTS idx_facturas_transporte_id ON facturas(transporte_id);
     CREATE INDEX IF NOT EXISTS idx_facturas_contenedor_id ON facturas(contenedor_id);
+    CREATE INDEX IF NOT EXISTS idx_pagos_empresa ON pagos(empresa_id);
+    CREATE INDEX IF NOT EXISTS idx_pagos_factura_id ON pagos(factura_id);
+    CREATE INDEX IF NOT EXISTS idx_pagos_cliente_id ON pagos(cliente_id);
 `);
 
 const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
@@ -527,6 +539,18 @@ function list(table, empresaId = null) {
             ORDER BY facturas.id DESC
         `).all(...scope.params);
     }
+    if (table === 'pagos') {
+        return database.prepare(`
+            SELECT pagos.*, facturas.numero AS factura_numero,
+                   facturas.importe AS factura_importe,
+                   clientes.nombre AS cliente
+            FROM pagos
+            JOIN facturas ON facturas.id = pagos.factura_id
+            JOIN clientes ON clientes.id = pagos.cliente_id
+            ${scope.sql ? `WHERE ${scope.sql}` : ''}
+            ORDER BY pagos.id DESC
+        `).all(...scope.params);
+    }
     return database.prepare(`SELECT * FROM "${table}" ${scope.sql ? `WHERE ${scope.sql}` : ''} ORDER BY id DESC`)
         .all(...scope.params);
 }
@@ -573,6 +597,9 @@ function create(table, payload, usuarioId = 1, empresaId = defaultCompany.id) {
     }
     if (table === 'facturas') {
         return createInvoice(payload, usuarioId, empresaId);
+    }
+    if (table === 'pagos') {
+        return createPayment(payload, usuarioId, empresaId);
     }
     const definition = definitions[table];
     const normalizedPayload = payload.estado !== undefined && table !== 'facturas'
@@ -951,7 +978,7 @@ function createContainer(payload, usuarioId = 1, empresaId = defaultCompany.id) 
     return record;
 }
 
-const invoiceStatuses = ['Borrador', 'Pendiente', 'Pagada', 'Vencida', 'Cancelada'];
+const invoiceStatuses = ['Borrador', 'Pendiente', 'Parcialmente pagada', 'Pagada', 'Vencida', 'Cancelada'];
 
 function normalizeInvoiceStatus(status) {
     const input = String(status || 'Pendiente').trim().toLowerCase();
@@ -1044,13 +1071,104 @@ function updateInvoiceStatus(id, status, usuarioId = 1, empresaId = defaultCompa
     if (current.estado === next) return list('facturas').find((row) => row.id === Number(id));
     const allowedTransitions = {
         Borrador: ['Pendiente', 'Cancelada'],
-        Pendiente: ['Pagada', 'Vencida', 'Cancelada'],
-        Vencida: ['Pagada', 'Cancelada'],
+        Pendiente: ['Parcialmente pagada', 'Pagada', 'Vencida', 'Cancelada'],
+        'Parcialmente pagada': ['Pagada', 'Vencida', 'Cancelada'],
+        Vencida: ['Parcialmente pagada', 'Pagada', 'Cancelada'],
         Pagada: [],
         Cancelada: []
     };
     if (!allowedTransitions[current.estado]?.includes(next)) {
         throw validationError('Transición inválida. Una factura debe avanzar de Borrador a Pendiente, y luego a Pagada, Vencida o Cancelada');
+    }
+
+    function createPayment(payload, usuarioId = 1, empresaId = defaultCompany.id) {
+        const invoiceId = Number(payload.factura_id);
+        if (!Number.isInteger(invoiceId) || invoiceId <= 0) {
+            throw validationError('Debe seleccionar una factura válida');
+        }
+        assertTenantRecord('facturas', invoiceId, empresaId);
+        const invoice = database.prepare('SELECT * FROM facturas WHERE id = ?').get(invoiceId);
+        if (!invoice) throw notFoundError();
+        if (['Borrador', 'Cancelada', 'Pagada'].includes(invoice.estado)) {
+            throw validationError('La factura no admite nuevos cobros en su estado actual');
+        }
+        const amount = Number(payload.importe);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            throw validationError('El importe del pago debe ser mayor que cero');
+        }
+        const paid = database.prepare(`
+            SELECT COALESCE(SUM(CAST(importe AS REAL)), 0) AS total
+            FROM pagos WHERE factura_id = ? AND empresa_id = ?
+        `).get(invoiceId, Number(empresaId)).total;
+        const balance = Number(invoice.importe || 0) - Number(paid || 0);
+        if (amount > balance + 0.000001) {
+            throw validationError(`El pago supera el saldo pendiente (${balance.toFixed(2)})`);
+        }
+        const currency = String(payload.moneda || invoice.moneda || 'USD').trim().toUpperCase();
+        if (currency !== String(invoice.moneda || 'USD').toUpperCase()) {
+            throw validationError('La moneda del pago debe coincidir con la moneda de la factura');
+        }
+        const date = validateInvoiceDate(
+            payload.fecha_pago || new Date().toISOString().slice(0, 10),
+            'La fecha de pago',
+            true
+        );
+        const result = insertRecord('pagos', [
+            'factura_id', 'cliente_id', 'moneda', 'importe', 'fecha_pago',
+            'metodo', 'referencia', 'observaciones', 'empresa_id'
+        ], {
+            factura_id: invoiceId,
+            cliente_id: invoice.cliente_id,
+            moneda: currency,
+            importe: amount,
+            fecha_pago: date,
+            metodo: String(payload.metodo || 'Transferencia').trim(),
+            referencia: String(payload.referencia || '').trim(),
+            observaciones: String(payload.observaciones || '').trim(),
+            empresa_id: empresaId
+        });
+        const newPaid = Number(paid || 0) + amount;
+        const nextStatus = newPaid + 0.000001 >= Number(invoice.importe || 0)
+            ? 'Pagada' : 'Parcialmente pagada';
+        database.prepare('UPDATE facturas SET estado = ?, fecha_pago = ? WHERE id = ?')
+            .run(nextStatus, date, invoiceId);
+        recordStatusHistory('pagos', Number(result.lastInsertRowid), null, 'Registrado', usuarioId);
+        recordAudit('pagos', 'Registrar cobro', Number(result.lastInsertRowid),
+            `Cobro ${currency} ${amount.toFixed(2)} aplicado a factura #${invoiceId}`, usuarioId, empresaId);
+        if (nextStatus !== invoice.estado) {
+            recordStatusHistory('facturas', invoiceId, invoice.estado, nextStatus, usuarioId);
+            recordAudit('facturas', 'Actualizar estado', invoiceId, `Factura: ${nextStatus}`, usuarioId, empresaId);
+        }
+        if (nextStatus === 'Pagada') finalizeService({ ...invoice, estado: nextStatus }, usuarioId);
+        return list('pagos', empresaId).find((row) => row.id === Number(result.lastInsertRowid));
+    }
+
+    function receivableSummary(empresaId = defaultCompany.id, filters = {}) {
+        const { from, to } = reportFilters(filters);
+        const conditions = ['facturas.empresa_id = ?'];
+        const params = [Number(empresaId)];
+        if (from) {
+            conditions.push('date(facturas.fecha_emision) >= date(?)');
+            params.push(from);
+        }
+        if (to) {
+            conditions.push('date(facturas.fecha_emision) <= date(?)');
+            params.push(to);
+        }
+        const where = conditions.join(' AND ');
+        return database.prepare(`
+            SELECT
+                COALESCE(SUM(CASE WHEN facturas.estado NOT IN ('Borrador', 'Cancelada')
+                    THEN CAST(facturas.importe AS REAL) ELSE 0 END), 0) AS totalFacturado,
+                COALESCE((SELECT SUM(CAST(pagos.importe AS REAL)) FROM pagos
+                    WHERE pagos.empresa_id = facturas.empresa_id), 0) AS totalCobrado,
+                COALESCE(SUM(CASE WHEN facturas.estado IN ('Pendiente', 'Parcialmente pagada', 'Vencida')
+                    THEN CAST(facturas.importe AS REAL) ELSE 0 END), 0)
+                    - COALESCE((SELECT SUM(CAST(pagos.importe AS REAL)) FROM pagos
+                        WHERE pagos.empresa_id = facturas.empresa_id), 0) AS totalPendiente,
+                SUM(CASE WHEN facturas.estado = 'Vencida' THEN 1 ELSE 0 END) AS facturasVencidas
+            FROM facturas WHERE ${where}
+        `).get(...params);
     }
     const fechaPago = next === 'Pagada' ? new Date().toISOString().slice(0, 10) : current.fecha_pago;
     database.prepare('UPDATE facturas SET estado = ?, fecha_pago = ? WHERE id = ?')
@@ -1823,14 +1941,21 @@ function reportData(filters = {}, empresaId = null) {
     `).get(...quotationsFilter.values);
     const invoicesFilter = filtered('facturas', statusFilter ? 'facturas.estado = ?' : '');
     const invoicesValue = database.prepare(`
-        SELECT COALESCE(SUM(CASE WHEN estado IN ('Pendiente', 'Pagada', 'Vencida') THEN CAST(importe AS REAL) ELSE 0 END), 0) AS total,
-               COALESCE(SUM(CASE WHEN estado IN ('Pendiente', 'Vencida') THEN CAST(importe AS REAL) ELSE 0 END), 0) AS pending
+        SELECT COALESCE(SUM(CASE WHEN facturas.estado IN ('Pendiente', 'Parcialmente pagada', 'Pagada', 'Vencida')
+                    THEN CAST(facturas.importe AS REAL) ELSE 0 END), 0) AS total,
+               COALESCE(SUM(CASE WHEN facturas.estado IN ('Pendiente', 'Parcialmente pagada', 'Vencida')
+                    THEN CAST(facturas.importe AS REAL) ELSE 0 END), 0) AS receivable
         FROM facturas ${invoicesFilter.sql}
     `).get(...invoicesFilter.values);
+    const paidForInvoices = database.prepare(`
+        SELECT COALESCE(SUM(CAST(pagos.importe AS REAL)), 0) AS value
+        FROM pagos JOIN facturas ON facturas.id = pagos.factura_id
+        ${invoicesFilter.sql ? `${invoicesFilter.sql} AND` : 'WHERE'} facturas.empresa_id = ?
+    `).get(...invoicesFilter.values, Number(empresaId)).value;
     const invoiceStatusValues = database.prepare(`
         SELECT
             COALESCE(SUM(CASE WHEN estado = 'Pagada' THEN CAST(importe AS REAL) ELSE 0 END), 0) AS paid,
-            COALESCE(SUM(CASE WHEN estado = 'Vencida' THEN CAST(importe AS REAL) ELSE 0 END), 0) AS overdue
+            COALESCE(SUM(CASE WHEN facturas.estado = 'Vencida' THEN CAST(facturas.importe AS REAL) ELSE 0 END), 0) AS overdue
         FROM facturas ${invoicesFilter.sql}
     `).get(...invoicesFilter.values);
     const invoiceCurrencies = database.prepare(`
@@ -1872,11 +1997,15 @@ function reportData(filters = {}, empresaId = null) {
         facturas: {
             total: total('facturas'),
             totalValue: invoicesValue.total,
-            pendingValue: invoicesValue.pending,
-            paidValue: invoiceStatusValues.paid,
+            pendingValue: Math.max(0, Number(invoicesValue.receivable) - Number(paidForInvoices)),
+            paidValue: paidForInvoices,
             overdueValue: invoiceStatusValues.overdue,
             byCurrency: invoiceCurrencies,
             byStatus: status('facturas')
+        },
+        pagos: {
+            total: database.prepare(`SELECT COUNT(*) AS value FROM pagos WHERE empresa_id = ?`).get(Number(empresaId)).value,
+            totalValue: database.prepare(`SELECT COALESCE(SUM(CAST(importe AS REAL)), 0) AS value FROM pagos WHERE empresa_id = ?`).get(Number(empresaId)).value
         }
     };
 }
@@ -1906,7 +2035,8 @@ function reportRows(filters = {}, empresaId = null) {
         Transportes: rows('transportes', 'id, cliente, cliente_id, cotizacion_id, origen, destino, tipo, estado, created_at', true),
         Contenedores: rows('contenedores', 'id, numero, cliente, cliente_id, transporte_id, tipo, puerto, estado, created_at', true),
         Mensajes: rows('mensajes', 'id, canal, cliente, mensaje, estado, created_at', true),
-        Facturas: rows('facturas', 'id, numero, cliente_id, cotizacion_id, transporte_id, contenedor_id, moneda, importe, estado, fecha_emision, fecha_vencimiento, fecha_pago, created_at', true)
+        Facturas: rows('facturas', 'id, numero, cliente_id, cotizacion_id, transporte_id, contenedor_id, moneda, importe, estado, fecha_emision, fecha_vencimiento, fecha_pago, created_at', true),
+        Pagos: rows('pagos', 'id, factura_id, cliente_id, moneda, importe, fecha_pago, metodo, referencia, observaciones, created_at')
     };
 }
 
