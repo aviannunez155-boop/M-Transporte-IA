@@ -10,7 +10,7 @@
   h1 { margin:0 0 7px; color:#17213d; font-size:28px; }
   .welcome p { margin:0; color:#7d89a8; }
   .date { color:#7d89a8; font-size:13px; }
-  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
+  .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:18px; }
   .stat, .panel { padding:22px; border:1px solid #e8ecf5; border-radius:12px; background:#fff; box-shadow:0 3px 12px rgba(25,42,80,.04); }
   .stat-label { color:#7d89a8; font-size:13px; }
   .stat-value { display:block; margin-top:12px; font-size:28px; }
@@ -18,22 +18,130 @@
   .dashboard-grid { display:grid; grid-template-columns:1.6fr 1fr; gap:18px; margin-top:18px; }
   .panel h2 { margin:0 0 18px; font-size:17px; }
   .empty { padding:35px 10px; color:#9aa5bf; text-align:center; }
+  .activity-list { display:flex; flex-direction:column; gap:0; }
+  .activity-item { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid #eef1f7; }
+  .activity-item:last-child { border-bottom:0; }
+  .activity-icon { display:grid; width:32px; height:32px; flex:none; place-items:center; border-radius:9px; color:#2f6df6; background:#edf3ff; font-size:14px; font-weight:700; }
+  .activity-copy { min-width:0; flex:1; }
+  .activity-copy strong { display:block; overflow:hidden; color:#253153; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+  .activity-copy span { display:block; margin-top:4px; color:#9aa5bf; font-size:11px; }
+  .activity-date { color:#9aa5bf; font-size:11px; white-space:nowrap; }
+  .loading { padding:35px 10px; color:#9aa5bf; text-align:center; }
+  .dashboard-chart { display:flex; align-items:flex-end; gap:14px; height:150px; padding:12px 4px 0; border-bottom:1px solid #e8ecf5; }
+  .chart-column { display:flex; min-width:35px; flex:1; height:100%; flex-direction:column; justify-content:flex-end; align-items:center; gap:7px; color:#7d89a8; font-size:10px; }
+  .chart-column i { display:block; width:100%; max-width:42px; min-height:4px; border-radius:6px 6px 0 0; background:#2f6df6; }
+  .chart-column strong { color:#253153; font-size:11px; }
+  .chart-legend { margin-top:12px; color:#7d89a8; font-size:11px; }
+  @media (max-width:1100px) { .stats { grid-template-columns:repeat(3,1fr); } }
   @media (max-width:900px) { .stats { grid-template-columns:repeat(2,1fr); } .dashboard-grid { grid-template-columns:1fr; } }
   @media (max-width:520px) { .welcome { display:block; } .date { display:block; margin-top:12px; } }
 </style>
 </head>
 <body>
-<div class="welcome"><div><h1>Buenos días, Admin 👋</h1><p>Este es el resumen de tu operación de transporte.</p></div><span class="date">Martes, 3 de noviembre de 2026</span></div>
+<div class="welcome"><div><h1 id="welcomeTitle">Resumen operativo</h1><p>Este es el resumen de tu operación de transporte.</p></div><span class="date" id="currentDate"></span></div>
 <section class="stats">
-  <div class="stat"><span class="stat-label">Transportes activos</span><strong class="stat-value">0</strong><span class="stat-change">Todo al día</span></div>
-  <div class="stat"><span class="stat-label">Cotizaciones pendientes</span><strong class="stat-value">0</strong><span class="stat-change">Sin pendientes</span></div>
-  <div class="stat"><span class="stat-label">Clientes registrados</span><strong class="stat-value">0</strong><span class="stat-change">Base de clientes</span></div>
-  <div class="stat"><span class="stat-label">Contenedores</span><strong class="stat-value">0</strong><span class="stat-change">Inventario</span></div>
+  <div class="stat"><span class="stat-label">Clientes registrados</span><strong class="stat-value" id="clientesCount">—</strong><span class="stat-change">Base de clientes</span></div>
+  <div class="stat"><span class="stat-label">Cotizaciones registradas</span><strong class="stat-value" id="cotizacionesCount">—</strong><span class="stat-change">Todas las cotizaciones</span></div>
+  <div class="stat"><span class="stat-label">Transportes registrados</span><strong class="stat-value" id="transportesCount">—</strong><span class="stat-change">Todos los transportes</span></div>
+  <div class="stat"><span class="stat-label">Contenedores registrados</span><strong class="stat-value" id="contenedoresCount">—</strong><span class="stat-change">Inventario total</span></div>
+  <div class="stat"><span class="stat-label">Mensajes registrados</span><strong class="stat-value" id="mensajesCount">—</strong><span class="stat-change">Todos los mensajes</span></div>
 </section>
 <section class="dashboard-grid">
-  <div class="panel"><h2>Actividad reciente</h2><div class="empty">Aún no hay actividad registrada.</div></div>
+  <div class="panel"><h2>Actividad reciente</h2><div class="loading" id="activity">Cargando actividad...</div></div>
+  <div class="panel"><h2>Volumen por módulo</h2><div class="loading" id="volumeChart">Cargando métricas...</div></div>
+</section>
+<section class="dashboard-grid">
+  <div class="panel"><h2>Estados operativos</h2><div class="loading" id="statusChart">Cargando métricas...</div></div>
   <div class="panel"><h2>Accesos rápidos</h2><div class="empty">Usa el menú lateral para gestionar tu operación.</div></div>
 </section>
+<section class="panel" style="margin-top:18px"><h2>Últimos registros creados</h2><div class="loading" id="recentRecords">Cargando registros...</div></section>
+<script src="/api.js"></script>
+<script>
+  const countIds = {
+    clientes: "clientesCount",
+    cotizaciones: "cotizacionesCount",
+    transportes: "transportesCount",
+    contenedores: "contenedoresCount",
+    mensajes: "mensajesCount"
+  };
+  const activityIcons = {
+    Clientes: "♙",
+    Cotizaciones: "▤",
+    Transportes: "↗",
+    Contenedores: "▣",
+    Mensajes: "✉"
+  };
+
+  function formatDate(value) {
+    const date = new Date(value.replace(" ", "T") + "Z");
+    return date.toLocaleString("es-ES", {
+      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[character]));
+  }
+
+  async function renderDashboard() {
+    const [data, session] = await Promise.all([loadDashboardData(), getSession()]);
+    if (session?.nombre) {
+      document.getElementById("welcomeTitle").textContent = `Buenos días, ${session.nombre} 👋`;
+    }
+    Object.entries(countIds).forEach(([module, id]) => {
+      document.getElementById(id).textContent = data.counts[module];
+    });
+    const activity = document.getElementById("activity");
+    activity.className = data.activity.length ? "activity-list" : "empty";
+    activity.innerHTML = data.activity.length
+      ? data.activity.map((item) => `
+          <div class="activity-item">
+            <span class="activity-icon">${activityIcons[item.module] || "•"}</span>
+            <div class="activity-copy"><strong>${escapeHtml(item.action)}</strong><span>${escapeHtml(item.module)} · ${escapeHtml(item.subject || "Sin detalle")}</span></div>
+            <span class="activity-date">${escapeHtml(formatDate(item.created_at))}</span>
+          </div>
+        `).join("")
+      : "Aún no hay actividad registrada.";
+    const modules = [
+      ["Clientes", data.counts.clientes], ["Cotizaciones", data.counts.cotizaciones],
+      ["Transportes", data.counts.transportes], ["Contenedores", data.counts.contenedores],
+      ["Mensajes", data.counts.mensajes]
+    ];
+    const maxModule = Math.max(...modules.map((item) => item[1]), 1);
+    document.getElementById("volumeChart").innerHTML = `
+      <div class="dashboard-chart">${modules.map(([label, value]) => `
+        <div class="chart-column"><strong>${value}</strong><i style="height:${value / maxModule * 100}%"></i><span>${label}</span></div>
+      `).join("")}</div><div class="chart-legend">Registros acumulados por módulo</div>`;
+    const statuses = data.reports.cotizaciones.byStatus;
+    const maxStatus = Math.max(...statuses.map((item) => item.value), 1);
+    document.getElementById("statusChart").innerHTML = statuses.length
+      ? `<div class="dashboard-chart">${statuses.map((item) => `
+          <div class="chart-column"><strong>${item.value}</strong><i style="height:${item.value / maxStatus * 100}%"></i><span>${escapeHtml(item.label)}</span></div>
+        `).join("")}</div><div class="chart-legend">Cotizaciones agrupadas por estado</div>`
+      : "Sin estados registrados.";
+    const recentRecords = document.getElementById("recentRecords");
+    recentRecords.className = data.recentRecords.length ? "activity-list" : "empty";
+    recentRecords.innerHTML = data.recentRecords.length
+      ? data.recentRecords.map((item) => `
+          <div class="activity-item">
+            <span class="activity-icon">${activityIcons[item.module] || "•"}</span>
+            <div class="activity-copy"><strong>${escapeHtml(item.subject || "Sin detalle")}</strong><span>${escapeHtml(item.module)} · Registro #${item.id}</span></div>
+            <span class="activity-date">${escapeHtml(formatDate(item.created_at))}</span>
+          </div>
+        `).join("")
+      : "Aún no hay registros creados.";
+  }
+
+  document.getElementById("currentDate").textContent = new Date().toLocaleDateString("es-ES", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric"
+  });
+  renderDashboard().catch((error) => {
+    console.error(error);
+    document.getElementById("activity").textContent = "No se pudo cargar la actividad.";
+  });
+</script>
 <script src="/sidebar.js"></script>
 </body>
 </html>

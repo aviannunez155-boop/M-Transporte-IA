@@ -66,7 +66,12 @@ border-bottom:1px solid #ddd;
 <h2>Nueva Solicitud</h2>
 
 <label>Cliente</label>
-<input type="text" id="cliente">
+<input type="text" id="cliente" readonly placeholder="Se completa desde la cotización">
+
+<label>Cotización de origen</label>
+<select id="cotizacion_id" required>
+<option value="">Cargando cotizaciones...</option>
+</select>
 
 <label>Origen</label>
 <input type="text" id="origen">
@@ -82,6 +87,14 @@ border-bottom:1px solid #ddd;
 <option>Contenedor 40</option>
 <option>Moto</option>
 <option>Triciclo</option>
+</select>
+
+<label>Estado</label>
+<select id="estado">
+<option>Pendiente</option>
+<option>Aprobado</option>
+<option>En Proceso</option>
+<option>Finalizado</option>
 </select>
 
 <button onclick="guardarSolicitud()">
@@ -103,6 +116,7 @@ Guardar Solicitud
 <th>Origen</th>
 <th>Destino</th>
 <th>Servicio</th>
+<th>Estado</th>
 </tr>
 </thead>
 
@@ -116,35 +130,64 @@ Guardar Solicitud
 
 <script src="/api.js"></script>
 <script>
+async function cargarCotizaciones() {
+  const cotizaciones = (await loadRecords("cotizaciones"))
+    .filter((cotizacion) => cotizacion.cliente_id && cotizacion.estado === "Aprobado");
+  const select = document.getElementById("cotizacion_id");
+  select.innerHTML = '<option value="" selected disabled>Seleccione una cotización aprobada</option>' +
+    cotizaciones.map((cotizacion) => `
+      <option value="${cotizacion.id}" data-cliente="${escapeHtml(cotizacion.cliente)}"
+        data-origen="${escapeHtml(cotizacion.origen)}" data-destino="${escapeHtml(cotizacion.destino)}"
+        data-tipo="${escapeHtml(cotizacion.servicio)}">
+        #${cotizacion.id} · ${escapeHtml(cotizacion.cliente || "Sin cliente")} · ${escapeHtml(cotizacion.origen)} → ${escapeHtml(cotizacion.destino)}
+      </option>
+    `).join("");
+  select.addEventListener("change", () => {
+    const option = select.options[select.selectedIndex];
+    document.getElementById("cliente").value = option.dataset.cliente || "";
+    document.getElementById("origen").value = option.dataset.origen || "";
+    document.getElementById("destino").value = option.dataset.destino || "";
+    if (option.dataset.tipo) document.getElementById("tipo").value = option.dataset.tipo;
+  });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[character]));
+}
+
 async function mostrarServicios() {
   const tabla = document.getElementById("tablaServicios");
   const servicios = await loadRecords("transportes");
   tabla.innerHTML = servicios.map((s) => `
-    <tr><td>${s.id}</td><td>${s.cliente}</td><td>${s.origen}</td><td>${s.destino}</td><td>${s.tipo}</td></tr>
+    <tr><td>${s.id}</td><td>${escapeHtml(s.cliente)}</td><td>${escapeHtml(s.origen)}</td><td>${escapeHtml(s.destino)}</td><td>${escapeHtml(s.tipo)}</td><td>${escapeHtml(s.estado)}</td></tr>
   `).join("");
 }
 
 async function guardarSolicitud() {
   const record = {
-    cliente: document.getElementById("cliente").value,
+    cotizacion_id: document.getElementById("cotizacion_id").value,
     origen: document.getElementById("origen").value,
     destino: document.getElementById("destino").value,
-    tipo: document.getElementById("tipo").value
+    tipo: document.getElementById("tipo").value,
+    estado: document.getElementById("estado").value
   };
-  if (record.cliente === "") {
-    alert("Debe indicar un cliente");
+  if (record.cotizacion_id === "") {
+    alert("Debe seleccionar una cotización");
     return;
   }
   try {
     await saveRecord("transportes", record);
     await mostrarServicios();
     ["cliente", "origen", "destino"].forEach((id) => document.getElementById(id).value = "");
+    document.getElementById("cotizacion_id").value = "";
   } catch (error) {
     showApiError(error);
   }
 }
 
-mostrarServicios().catch(showApiError);
+Promise.all([cargarCotizaciones(), mostrarServicios()]).catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 

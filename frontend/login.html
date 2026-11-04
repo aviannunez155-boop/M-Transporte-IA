@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iniciar sesión | MiTransporte IA</title>
+<style>
+body{display:grid;min-height:100vh;margin:0;place-items:center;background:#f5f7fb;color:#17213d;font-family:Arial,sans-serif}
+.login{width:min(380px,calc(100% - 36px));padding:32px;border:1px solid #e8ecf5;border-radius:14px;background:#fff;box-shadow:0 10px 30px #17213d12}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:28px}.mark{display:grid;width:38px;height:38px;place-items:center;border-radius:10px;color:#fff;background:#2f6df6;font-size:21px;font-weight:800}.brand strong{display:block;font-size:18px}.brand small{color:#7d89a8;font-size:9px;letter-spacing:1px}
+h1{margin:0 0 7px;font-size:24px}p{margin:0 0 22px;color:#7d89a8;font-size:13px}label{display:block;margin:13px 0 6px;color:#566383;font-size:12px;font-weight:700}input{width:100%;padding:11px;border:1px solid #dfe5f1;border-radius:7px;box-sizing:border-box}button{width:100%;margin-top:20px;padding:12px;border:0;border-radius:7px;color:#fff;background:#2f6df6;font-weight:700;cursor:pointer}.error{min-height:18px;margin-top:12px;color:#c25b68;font-size:12px}
+</style>
+</head>
+<body>
+<main class="login">
+  <div class="brand"><div class="mark">M</div><div><strong>MiTransporte</strong><small>IA · ERP LOGÍSTICO</small></div></div>
+  <h1>Iniciar sesión</h1><p>Accede a tu espacio de trabajo.</p>
+  <form id="loginForm">
+    <label for="email">Correo</label><input id="email" type="email" value="admin@mitransporte.local" required>
+    <label for="password">Contraseña</label><input id="password" type="password" required autofocus>
+    <button>Entrar</button><div class="error" id="error" role="alert"></div>
+  </form>
+</main>
+<script>
+document.getElementById("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const error = document.getElementById("error");
+  error.textContent = "";
+  try {
+    const response = await fetch("/api/login", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email:email.value, password:password.value }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo iniciar sesión");
+    window.location.href = "/dashboard";
+  } catch (reason) { error.textContent = reason.message; }
+});
+</script>
+</body>
+</html>

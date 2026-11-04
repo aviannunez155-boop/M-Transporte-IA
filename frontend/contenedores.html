@@ -68,8 +68,15 @@ border-bottom:1px solid #ddd;
 <label>Número</label>
 <input type="text" id="numero">
 
+<label>Transporte</label>
+<select id="transporte_id">
+<option value="">Sin transporte asociado</option>
+</select>
+
 <label>Cliente</label>
-<input type="text" id="cliente">
+<select id="cliente_id" required>
+<option value="">Cargando clientes...</option>
+</select>
 
 <label>Tipo</label>
 
@@ -80,6 +87,14 @@ border-bottom:1px solid #ddd;
 
 <label>Puerto</label>
 <input type="text" id="puerto">
+
+<label>Estado</label>
+<select id="estado">
+<option>Pendiente</option>
+<option>Aprobado</option>
+<option>En Proceso</option>
+<option>Finalizado</option>
+</select>
 
 <button onclick="guardarContenedor()">
 Guardar Contenedor
@@ -100,6 +115,7 @@ Guardar Contenedor
 <th>Cliente</th>
 <th>Tipo</th>
 <th>Puerto</th>
+<th>Estado</th>
 </tr>
 </thead>
 
@@ -113,35 +129,70 @@ Guardar Contenedor
 
 <script src="/api.js"></script>
 <script>
+async function cargarTransportes() {
+  const transportes = (await loadRecords("transportes"))
+    .filter((transporte) => ["En Proceso", "Finalizado"].includes(transporte.estado));
+  const select = document.getElementById("transporte_id");
+  select.innerHTML = '<option value="">Sin transporte asociado</option>' +
+    transportes.map((transporte) => `
+      <option value="${transporte.id}" data-cliente-id="${transporte.cliente_id || ""}">
+        #${transporte.id} · ${escapeHtml(transporte.cliente || "Sin cliente")} · ${escapeHtml(transporte.origen)} → ${escapeHtml(transporte.destino)}
+      </option>
+    `).join("");
+  select.addEventListener("change", () => {
+    const option = select.options[select.selectedIndex];
+    if (option.value) {
+      document.getElementById("cliente_id").value = option.dataset.clienteId || "";
+    }
+  });
+}
+
+async function cargarClientes() {
+  const clientes = await loadRecords("clientes");
+  document.getElementById("cliente_id").innerHTML =
+    '<option value="" selected disabled>Seleccione un cliente</option>' +
+    clientes.map((cliente) => `<option value="${cliente.id}">${escapeHtml(cliente.nombre)}</option>`).join("");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[character]));
+}
+
 async function mostrarContenedores() {
   const tabla = document.getElementById("tablaContenedores");
   const contenedores = await loadRecords("contenedores");
   tabla.innerHTML = contenedores.map((c) => `
-    <tr><td>${c.id}</td><td>${c.numero}</td><td>${c.cliente}</td><td>${c.tipo}</td><td>${c.puerto}</td></tr>
+    <tr><td>${c.id}</td><td>${escapeHtml(c.numero)}</td><td>${escapeHtml(c.cliente)}</td><td>${escapeHtml(c.tipo)}</td><td>${escapeHtml(c.puerto)}</td><td>${escapeHtml(c.estado)}</td></tr>
   `).join("");
 }
 
 async function guardarContenedor() {
   const record = {
     numero: document.getElementById("numero").value,
-    cliente: document.getElementById("cliente").value,
+    cliente_id: document.getElementById("cliente_id").value,
+    transporte_id: document.getElementById("transporte_id").value,
     tipo: document.getElementById("tipo").value,
-    puerto: document.getElementById("puerto").value
+    puerto: document.getElementById("puerto").value,
+    estado: document.getElementById("estado").value
   };
-  if (record.numero === "") {
-    alert("Debe indicar el número");
+  if (record.numero === "" || record.cliente_id === "") {
+    alert("Debe indicar el número y seleccionar un cliente");
     return;
   }
   try {
     await saveRecord("contenedores", record);
     await mostrarContenedores();
-    ["numero", "cliente", "puerto"].forEach((id) => document.getElementById(id).value = "");
+    ["numero", "puerto"].forEach((id) => document.getElementById(id).value = "");
+    document.getElementById("cliente_id").value = "";
+    document.getElementById("transporte_id").value = "";
   } catch (error) {
     showApiError(error);
   }
 }
 
-mostrarContenedores().catch(showApiError);
+Promise.all([cargarClientes(), cargarTransportes(), mostrarContenedores()]).catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 

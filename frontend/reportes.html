@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reportes | MiTransporte IA</title>
+<link rel="stylesheet" href="/sidebar.css">
+<style>
+body{font-family:Arial,sans-serif}
+h1{margin:0 0 7px;color:#17213d;font-size:28px}.subtitle{margin:0 0 26px;color:#7d89a8}
+.report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.panel{padding:22px;border:1px solid #e8ecf5;border-radius:12px;background:#fff;box-shadow:0 3px 12px rgba(25,42,80,.04)}
+.panel h2{margin:0 0 18px;font-size:17px}.metric-row{display:flex;gap:12px;margin-bottom:18px}
+.metric{flex:1;padding:13px;border-radius:8px;background:#f5f7fb}.metric span{display:block;color:#7d89a8;font-size:11px}.metric strong{display:block;margin-top:6px;color:#17213d;font-size:21px}
+.bar-row{display:grid;grid-template-columns:115px 1fr 40px;align-items:center;gap:10px;margin:12px 0;color:#566383;font-size:12px}.bar{height:9px;overflow:hidden;border-radius:8px;background:#edf1f8}.bar i{display:block;height:100%;border-radius:8px;background:#2f6df6}
+.wide{grid-column:1/-1}.loading,.error{padding:25px;color:#9aa5bf;text-align:center}.error{color:#c25b68}
+@media(max-width:800px){.report-grid{grid-template-columns:1fr}.wide{grid-column:auto}.bar-row{grid-template-columns:90px 1fr 30px}}
+</style>
+</head>
+<body>
+<h1>Reportes empresariales</h1>
+<p class="subtitle">Indicadores operativos calculados directamente desde SQLite.</p>
+<section class="report-grid">
+  <div class="panel"><h2>Reporte de clientes</h2><div id="clientes" class="loading">Cargando...</div></div>
+  <div class="panel"><h2>Reporte de cotizaciones</h2><div id="cotizaciones" class="loading">Cargando...</div></div>
+  <div class="panel"><h2>Reporte de transportes</h2><div id="transportes" class="loading">Cargando...</div></div>
+  <div class="panel"><h2>Reporte de contenedores</h2><div id="contenedores" class="loading">Cargando...</div></div>
+  <div class="panel wide"><h2>Reporte de mensajes</h2><div id="mensajes" class="loading">Cargando...</div></div>
+</section>
+<script src="/api.js"></script>
+<script>
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const money = (value) => new Intl.NumberFormat("es-ES", { style:"currency", currency:"USD", maximumFractionDigits:2 }).format(Number(value) || 0);
+function bars(items) {
+  if (!items.length) return '<div class="loading">Sin datos registrados.</div>';
+  const max = Math.max(...items.map((item) => Number(item.value)));
+  return items.map((item) => `<div class="bar-row"><span>${escapeHtml(item.label)}</span><div class="bar"><i style="width:${max ? Number(item.value) / max * 100 : 0}%"></i></div><strong>${item.value}</strong></div>`).join("");
+}
+function metrics(items) {
+  return `<div class="metric-row">${items.map((item) => `<div class="metric"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item.value)}</strong></div>`).join("")}</div>`;
+}
+async function renderReports() {
+  const data = await loadReports();
+  document.getElementById("clientes").innerHTML = metrics([{label:"Total registrados",value:data.clientes.total}]) + "<h3>Por provincia</h3>" + bars(data.clientes.byProvince);
+  document.getElementById("cotizaciones").innerHTML = metrics([{label:"Total",value:data.cotizaciones.total},{label:"Valor total",value:money(data.cotizaciones.totalValue)},{label:"Promedio",value:money(data.cotizaciones.averageValue)}]) + "<h3>Por estado</h3>" + bars(data.cotizaciones.byStatus);
+  document.getElementById("transportes").innerHTML = metrics([{label:"Total registrados",value:data.transportes.total}]) + "<h3>Por estado</h3>" + bars(data.transportes.byStatus);
+  document.getElementById("contenedores").innerHTML = metrics([{label:"Total registrados",value:data.contenedores.total}]) + "<h3>Por estado</h3>" + bars(data.contenedores.byStatus);
+  document.getElementById("mensajes").innerHTML = metrics([{label:"Total registrados",value:data.mensajes.total}]) + "<h3>Por canal</h3>" + bars(data.mensajes.byChannel);
+}
+renderReports().catch((error) => { console.error(error); document.querySelectorAll(".loading").forEach((node) => { node.className = "error"; node.textContent = "No se pudo cargar el reporte."; }); });
+</script>
+<script src="/sidebar.js"></script>
+</body>
+</html>

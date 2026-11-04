@@ -82,6 +82,14 @@ border-bottom:1px solid #ddd;
 <label>Mensaje</label>
 <textarea id="mensaje"></textarea>
 
+<label>Estado</label>
+<select id="estado">
+<option>Pendiente</option>
+<option>Aprobado</option>
+<option>En Proceso</option>
+<option>Finalizado</option>
+</select>
+
 <button onclick="guardarMensaje()">
 Guardar Mensaje
 </button>
@@ -100,6 +108,7 @@ Guardar Mensaje
 <th>Canal</th>
 <th>Cliente</th>
 <th>Mensaje</th>
+<th>Estado</th>
 </tr>
 </thead>
 
@@ -117,7 +126,7 @@ async function mostrarMensajes() {
   const tabla = document.getElementById("tablaMensajes");
   const mensajes = await loadRecords("mensajes");
   tabla.innerHTML = mensajes.map((m) => `
-    <tr><td>${m.id}</td><td>${m.canal}</td><td>${m.cliente}</td><td>${m.mensaje}</td></tr>
+    <tr><td>${m.id}</td><td>${m.canal}</td><td>${m.cliente}</td><td>${m.mensaje}</td><td>${m.estado}</td></tr>
   `).join("");
 }
 
@@ -125,7 +134,8 @@ async function guardarMensaje() {
   const record = {
     canal: document.getElementById("canal").value,
     cliente: document.getElementById("cliente").value,
-    mensaje: document.getElementById("mensaje").value
+    mensaje: document.getElementById("mensaje").value,
+    estado: document.getElementById("estado").value
   };
   if (record.cliente === "") {
     alert("Debe indicar el cliente");

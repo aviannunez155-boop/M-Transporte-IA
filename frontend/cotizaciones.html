@@ -88,7 +88,9 @@ font-weight:bold;
 <h2>Nueva Cotización</h2>
 
 <label>Cliente</label>
-<input type="text" id="cliente">
+<select id="cliente_id" required>
+<option value="">Cargando clientes...</option>
+</select>
 
 <label>Teléfono</label>
 <input type="text" id="telefono">
@@ -120,9 +122,9 @@ font-weight:bold;
 <select id="estado">
 
 <option>Pendiente</option>
-<option>Enviada</option>
-<option>Aprobada</option>
-<option>Rechazada</option>
+<option>Aprobado</option>
+<option>En Proceso</option>
+<option>Finalizado</option>
 
 </select>
 
@@ -163,17 +165,34 @@ Guardar Cotización
 
 <script src="/api.js"></script>
 <script>
+async function cargarClientes() {
+  const clientes = await loadRecords("clientes");
+  const select = document.getElementById("cliente_id");
+  select.innerHTML = '<option value="" selected disabled>Seleccione un cliente</option>' +
+    clientes.map((cliente) => `<option value="${cliente.id}" data-telefono="${escapeHtml(cliente.telefono)}">${escapeHtml(cliente.nombre)}</option>`).join("");
+  select.addEventListener("change", () => {
+    const option = select.options[select.selectedIndex];
+    document.getElementById("telefono").value = option.dataset.telefono || "";
+  });
+}
+
 async function mostrarCotizaciones() {
   const tabla = document.getElementById("tablaCotizaciones");
   const cotizaciones = await loadRecords("cotizaciones");
   tabla.innerHTML = cotizaciones.map((c) => `
-    <tr><td>${c.id}</td><td>${c.cliente}</td><td>${c.servicio}</td><td>$${c.importe}</td><td>${c.estado}</td></tr>
+    <tr><td>${c.id}</td><td>${escapeHtml(c.cliente)}</td><td>${escapeHtml(c.servicio)}</td><td>$${escapeHtml(c.importe)}</td><td>${escapeHtml(c.estado)}</td></tr>
   `).join("");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[character]));
 }
 
 async function guardarCotizacion() {
   const record = {
-    cliente: document.getElementById("cliente").value,
+    cliente_id: document.getElementById("cliente_id").value,
     telefono: document.getElementById("telefono").value,
     origen: document.getElementById("origen").value,
     destino: document.getElementById("destino").value,
@@ -182,21 +201,22 @@ async function guardarCotizacion() {
     estado: document.getElementById("estado").value,
     observaciones: document.getElementById("observaciones").value
   };
-  if (record.cliente === "") {
-    alert("Debe indicar el cliente");
+  if (record.cliente_id === "") {
+    alert("Debe seleccionar el cliente");
     return;
   }
   try {
     await saveRecord("cotizaciones", record);
     await mostrarCotizaciones();
-    ["cliente", "telefono", "origen", "destino", "importe", "observaciones"]
+    document.getElementById("cliente_id").value = "";
+    ["telefono", "origen", "destino", "importe", "observaciones"]
       .forEach((id) => document.getElementById(id).value = "");
   } catch (error) {
     showApiError(error);
   }
 }
 
-mostrarCotizaciones().catch(showApiError);
+Promise.all([cargarClientes(), mostrarCotizaciones()]).catch(showApiError);
 </script>
 <script src="/sidebar.js"></script>
 

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administración | MiTransporte IA</title>
+<link rel="stylesheet" href="/sidebar.css">
+<style>
+body{font-family:Arial,sans-serif}
+h1{margin:0 0 7px;color:#17213d;font-size:28px}
+.subtitle{margin:0 0 26px;color:#7d89a8}
+.admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.panel{padding:22px;border:1px solid #e8ecf5;border-radius:12px;background:#fff;box-shadow:0 3px 12px rgba(25,42,80,.04)}
+.panel h2{margin:0 0 18px;font-size:17px}
+label{display:block;margin:10px 0 5px;color:#566383;font-size:12px;font-weight:700}
+input,select,textarea{width:100%;padding:10px;border:1px solid #dfe5f1;border-radius:6px}
+textarea{min-height:60px;resize:vertical}
+button{margin-top:14px;padding:10px 16px;border:0;border-radius:6px;color:#fff;background:#2f6df6;cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:10px;color:#71809f;background:#f5f7fb;text-align:left}
+td{padding:10px;border-bottom:1px solid #eef1f7;color:#35415f}
+.table-wrap{max-height:230px;overflow:auto}
+.wide{grid-column:1/-1}
+.permissions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.permissions label{display:flex;align-items:center;gap:7px;margin:0;padding:8px;border-radius:6px;background:#f5f7fb;font-weight:400}
+.permissions input{width:auto}
+.muted{color:#9aa5bf;text-align:center}
+@media(max-width:850px){.admin-grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+</style>
+</head>
+<body>
+<h1>Administración</h1>
+<p class="subtitle">Gestiona usuarios, configuración y trazabilidad del sistema.</p>
+<section class="admin-grid">
+  <div class="panel">
+    <h2>Usuarios</h2>
+    <form id="userForm">
+      <label for="userName">Nombre</label><input id="userName" required>
+      <label for="userEmail">Correo</label><input id="userEmail" type="email" required>
+      <label for="userPassword">Contraseña inicial</label><input id="userPassword" type="password" required minlength="8">
+      <label for="userRole">Rol</label><select id="userRole" required></select>
+      <label for="userStatus">Estado</label><select id="userStatus"><option>Activo</option><option>Inactivo</option></select>
+      <button>Crear usuario</button>
+    </form>
+    <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead><tbody id="usersTable"></tbody></table></div>
+  </div>
+  <div class="panel">
+    <h2>Permisos por rol</h2>
+    <label for="permissionRole">Rol</label><select id="permissionRole"></select>
+    <div id="permissions" class="permissions"></div>
+    <button id="savePermissions" type="button">Guardar permisos</button>
+  </div>
+  <div class="panel">
+    <h2>Roles</h2>
+    <form id="roleForm">
+      <label for="roleName">Nombre</label><input id="roleName" required>
+      <label for="roleDescription">Descripción</label><textarea id="roleDescription"></textarea>
+      <button>Crear rol</button>
+    </form>
+    <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Descripción</th></tr></thead><tbody id="rolesTable"></tbody></table></div>
+  </div>
+  <div class="panel">
+    <h2>Configuración del sistema</h2>
+    <form id="settingsForm">
+      <label for="settingKey">Clave</label><input id="settingKey" required>
+      <label for="settingValue">Valor</label><input id="settingValue" required>
+      <label for="settingDescription">Descripción</label><input id="settingDescription">
+      <button>Guardar configuración</button>
+    </form>
+    <div class="table-wrap"><table><thead><tr><th>Clave</th><th>Valor</th><th>Descripción</th></tr></thead><tbody id="settingsTable"></tbody></table></div>
+  </div>
+  <div class="panel wide">
+    <h2>Registro de actividad</h2>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Módulo</th><th>Acción</th><th>Descripción</th></tr></thead><tbody id="activityTable"></tbody></table></div>
+  </div>
+  <div class="panel wide">
+    <h2>Auditoría de cambios</h2>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Módulo</th><th>Acción</th><th>Registro</th><th>Detalles</th></tr></thead><tbody id="auditTable"></tbody></table></div>
+  </div>
+</section>
+<script src="/api.js"></script>
+<script>
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const formatDate = (value) => new Date(String(value).replace(" ","T") + "Z").toLocaleString("es-ES");
+async function render() {
+  const [users, roles, settings, activity, audit, permissions, rolePermissions] = await Promise.all([
+    loadRecords("usuarios"), loadRecords("roles"), loadRecords("configuracion"),
+    loadRecords("actividad"), loadRecords("auditoria"), loadRecords("permisos"), loadRecords("rol_permisos")
+  ]);
+  document.getElementById("userRole").innerHTML = roles.map((r) => `<option value="${r.id}">${escapeHtml(r.nombre)}</option>`).join("");
+  document.getElementById("usersTable").innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.nombre)}</td><td>${escapeHtml(u.correo)}</td><td>${escapeHtml(u.rol)}</td><td>${escapeHtml(u.estado)}</td></tr>`).join("");
+  document.getElementById("rolesTable").innerHTML = roles.map((r) => `<tr><td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.descripcion)}</td></tr>`).join("");
+  document.getElementById("settingsTable").innerHTML = settings.map((s) => `<tr><td>${escapeHtml(s.clave)}</td><td>${escapeHtml(s.valor)}</td><td>${escapeHtml(s.descripcion)}</td></tr>`).join("");
+  document.getElementById("activityTable").innerHTML = activity.map((a) => `<tr><td>${formatDate(a.created_at)}</td><td>${escapeHtml(a.modulo)}</td><td>${escapeHtml(a.accion)}</td><td>${escapeHtml(a.descripcion)}</td></tr>`).join("");
+  document.getElementById("auditTable").innerHTML = audit.map((a) => `<tr><td>${formatDate(a.created_at)}</td><td>${escapeHtml(a.modulo)}</td><td>${escapeHtml(a.accion)}</td><td>${escapeHtml(a.registro_id)}</td><td>${escapeHtml(a.detalles)}</td></tr>`).join("");
+  const roleSelect = document.getElementById("permissionRole");
+  roleSelect.innerHTML = roles.map((role) => `<option value="${role.id}">${escapeHtml(role.nombre)}</option>`).join("");
+  const renderPermissions = () => {
+    const assigned = new Set(rolePermissions.filter((item) => item.rol_id === Number(roleSelect.value)).map((item) => item.permiso));
+    document.getElementById("permissions").innerHTML = permissions.map((permission) => `
+      <label><input type="checkbox" value="${escapeHtml(permission.clave)}" ${assigned.has(permission.clave) ? "checked" : ""}>${escapeHtml(permission.clave)}</label>
+    `).join("");
+  };
+  roleSelect.onchange = renderPermissions;
+  renderPermissions();
+}
+async function submitForm(form, resource, payload) {
+  try { await saveRecord(resource, payload); form.reset(); await render(); } catch (error) { showApiError(error); }
+}
+document.getElementById("userForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "usuarios", { nombre:document.getElementById("userName").value, correo:document.getElementById("userEmail").value, password:document.getElementById("userPassword").value, rol_id:document.getElementById("userRole").value, estado:document.getElementById("userStatus").value }); });
+document.getElementById("roleForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "roles", { nombre:document.getElementById("roleName").value, descripcion:document.getElementById("roleDescription").value }); });
+document.getElementById("settingsForm").addEventListener("submit", (event) => { event.preventDefault(); submitForm(event.target, "configuracion", { clave:document.getElementById("settingKey").value, valor:document.getElementById("settingValue").value, descripcion:document.getElementById("settingDescription").value }); });
+document.getElementById("savePermissions").addEventListener("click", async () => {
+  const permisos = [...document.querySelectorAll("#permissions input:checked")].map((input) => input.value);
+  try {
+    const response = await fetch(`/roles/${document.getElementById("permissionRole").value}/permisos`, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ permisos }) });
+    if (!response.ok) throw new Error((await response.json()).error || "No se pudieron guardar los permisos");
+    await render();
+  } catch (error) { showApiError(error); }
+});
+render().catch(showApiError);
+</script>
+<script src="/sidebar.js"></script>
+</body>
+</html>

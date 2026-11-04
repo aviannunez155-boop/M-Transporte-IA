@@ -5,7 +5,9 @@
     { href: "/clientes-app", label: "Clientes", icon: "♙" },
     { href: "/contenedores-app", label: "Contenedores", icon: "▣" },
     { href: "/cotizaciones-app", label: "Cotizaciones", icon: "▤" },
-    { href: "/mensajes-app", label: "Mensajes", icon: "✉" }
+    { href: "/mensajes-app", label: "Mensajes", icon: "✉" },
+    { href: "/reportes-app", label: "Reportes", icon: "▥" },
+    { href: "/administracion-app", label: "Administración", icon: "⚙" }
   ];
 
   const currentPath = window.location.pathname;
@@ -47,7 +49,7 @@
       <div class="user-card">
         <div class="avatar">AG</div>
         <div><strong>Admin General</strong><small>Administrador</small></div>
-        <span class="user-menu">•••</span>
+        <button class="user-menu" type="button" aria-label="Cerrar sesión">Salir</button>
       </div>
     </div>
   `;
@@ -64,4 +66,7 @@
   menuButton.addEventListener("click", () => document.body.classList.add("sidebar-open"));
   sidebar.querySelector(".sidebar-close").addEventListener("click", closeMenu);
   sidebar.querySelectorAll(".nav-item").forEach((link) => link.addEventListener("click", closeMenu));
+  sidebar.querySelector(".user-menu").addEventListener("click", () => {
+    fetch("/api/logout", { method: "POST" }).finally(() => { window.location.href = "/login"; });
+  });
 })();
